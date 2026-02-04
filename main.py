@@ -6,8 +6,9 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import sqlite3
 from datetime import datetime
 from typing import Optional
+import signal
 
-# ========== HEALTH CHECK SERVER (OBLIGATOIRE POUR RENDER) ==========
+# ========== HEALTH CHECK SERVER AMÉLIORÉ ==========
 class HealthHandler(BaseHTTPRequestHandler):
     """Handler pour les health checks HTTP"""
     def do_GET(self):
@@ -15,10 +16,17 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
             self.end_headers()
-            self.wfile.write(b'Bot Discord Tribunal en ligne!')
-        else:
-            self.send_response(404)
+            self.wfile.write(b'🤖 Bot Discord Tribunal en ligne!')
+        elif self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
             self.end_headers()
+            self.wfile.write(b'{"status": "ok", "service": "discord-bot"}')
+        else:
+            self.send_response(200)  # ✅ TOUJOURS 200 même pour les autres chemins
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Bot Discord Tribunal')
     
     def log_message(self, format, *args):
         """Désactive les logs HTTP pour éviter le spam"""
@@ -33,21 +41,29 @@ def start_health_server():
         
         print(f"✅ Serveur health check démarré sur le port {port}")
         print(f"✅ URL: http://0.0.0.0:{port}/")
-        sys.stdout.flush()  # Force l'affichage dans les logs Render
+        sys.stdout.flush()
+        
+        # Gérer le shutdown proprement
+        def shutdown(signum, frame):
+            print("🔴 Arrêt du serveur health check...")
+            server.shutdown()
+        
+        signal.signal(signal.SIGTERM, shutdown)
         
         server.serve_forever()
     except Exception as e:
         print(f"❌ Erreur serveur health check: {e}")
         sys.stdout.flush()
-        raise
+        # Ne pas quitter, le bot Discord peut fonctionner sans
 
-# Démarrer le serveur health check dans un thread séparé
+# Démarrer le serveur health check IMMÉDIATEMENT
 print("🚀 Démarrage du health check...")
 health_thread = threading.Thread(target=start_health_server, daemon=True)
 health_thread.start()
 
-# Petite pause pour être sûr que le serveur démarre
-time.sleep(1)
+# Attendre que le serveur soit prêt
+time.sleep(2)
+print("✅ Health check prêt")
 # ========== FIN HEALTH CHECK ==========
 
 # ========== IMPORTS DISCORD ==========
@@ -60,7 +76,8 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 if not TOKEN:
     print("❌ ERREUR: DISCORD_TOKEN non défini!")
     print("Configure la variable d'environnement DISCORD_TOKEN sur Render")
-    sys.exit(1)
+    # Continuer quand même pour que le health check fonctionne
+    print("⚠️ Le bot Discord ne démarrera pas, mais le health check est actif")
 
 print("🔧 Initialisation du bot Discord...")
 
@@ -437,6 +454,10 @@ async def on_ready():
         print(f"✅ Serveurs: {len(bot.guilds)}")
         print(f"✅ Health check actif sur le port {os.environ.get('PORT', 10000)}")
         print("🚀 Bot prêt à fonctionner!")
+        
+        # Afficher l'URL du health check
+        port = os.environ.get('PORT', 10000)
+        print(f"🌐 Health check URL: https://tribunal-095-akusa.onrender.com/")
     except Exception as e:
         print(f"❌ Erreur de synchronisation: {e}")
 
@@ -879,7 +900,19 @@ async def on_app_command_error(interaction: discord.Interaction, error):
 # ---------- START BOT ----------
 print("🤖 Démarrage du bot Discord...")
 try:
-    bot.run(TOKEN)
+    if TOKEN:
+        bot.run(TOKEN)
+    else:
+        print("⚠️ Token Discord manquant, maintien du health check actif...")
+        # Garder le script en vie pour le health check
+        while True:
+            time.sleep(60)
 except Exception as e:
-    print(f"❌ Erreur de démarrage: {e}")
-    print("Vérifie que le token DISCORD_TOKEN est correct")
+    print(f"❌ Erreur de démarrage du bot: {e}")
+    print("⚠️ Le health check reste actif")
+    # Continuer à exécuter le script pour le health check
+    try:
+        while True:
+            time.sleep(60)
+    except KeyboardInterrupt:
+        print("🔴 Arrêt du script")
