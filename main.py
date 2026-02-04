@@ -1,14 +1,70 @@
-import discord
-from discord.ext import commands
-from discord import app_commands
-import sqlite3
 import os
+import sys
+import threading
+import time
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import sqlite3
 from datetime import datetime
 from typing import Optional
 
-TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("TOKEN")
+# ========== HEALTH CHECK SERVER (OBLIGATOIRE POUR RENDER) ==========
+class HealthHandler(BaseHTTPRequestHandler):
+    """Handler pour les health checks HTTP"""
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Bot Discord Tribunal en ligne!')
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        """Désactive les logs HTTP pour éviter le spam"""
+        pass
 
-# ---------- DATABASE ----------
+def start_health_server():
+    """Démarre le serveur HTTP pour les health checks"""
+    try:
+        # Render fournit le PORT dans les variables d'environnement
+        port = int(os.environ.get('PORT', 10000))
+        server = HTTPServer(('0.0.0.0', port), HealthHandler)
+        
+        print(f"✅ Serveur health check démarré sur le port {port}")
+        print(f"✅ URL: http://0.0.0.0:{port}/")
+        sys.stdout.flush()  # Force l'affichage dans les logs Render
+        
+        server.serve_forever()
+    except Exception as e:
+        print(f"❌ Erreur serveur health check: {e}")
+        sys.stdout.flush()
+        raise
+
+# Démarrer le serveur health check dans un thread séparé
+print("🚀 Démarrage du health check...")
+health_thread = threading.Thread(target=start_health_server, daemon=True)
+health_thread.start()
+
+# Petite pause pour être sûr que le serveur démarre
+time.sleep(1)
+# ========== FIN HEALTH CHECK ==========
+
+# ========== IMPORTS DISCORD ==========
+import discord
+from discord.ext import commands
+from discord import app_commands
+
+# Configuration
+TOKEN = os.getenv("DISCORD_TOKEN")
+if not TOKEN:
+    print("❌ ERREUR: DISCORD_TOKEN non défini!")
+    print("Configure la variable d'environnement DISCORD_TOKEN sur Render")
+    sys.exit(1)
+
+print("🔧 Initialisation du bot Discord...")
+
+# ---------- DATABASE FUNCTIONS ----------
 def init_db():
     """Initialise la base de données"""
     db = sqlite3.connect("data.db", check_same_thread=False)
@@ -50,6 +106,7 @@ def init_db():
     return db, cursor
 
 db, cursor = init_db()
+print("✅ Base de données initialisée")
 
 def get_roles(guild_id: int, role_type: str):
     """Récupère les rôles autorisés pour un type donné"""
@@ -183,23 +240,14 @@ def set_config(guild_id: int, **kwargs):
         print(f"Erreur set_config: {e}")
         return False
 
-# ---------- BOT ----------
+# ---------- BOT SETUP ----------
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-@bot.event
-async def on_ready():
-    try:
-        synced = await bot.tree.sync()
-        print(f"✅ Connecté : {bot.user}")
-        print(f"✅ {len(synced)} commande(s) synchronisée(s)")
-    except Exception as e:
-        print(f"❌ Erreur de synchronisation: {e}")
-
-# ---------- VIEW ----------
+# ---------- TRIBUNAL VIEW ----------
 class TribunalView(discord.ui.View):
     def __init__(self, target: discord.Member, original_embed: discord.Embed, 
                  proof_url: str = None, moderator: discord.Member = None):
@@ -378,7 +426,21 @@ class TribunalView(discord.ui.View):
                 ephemeral=True
             )
 
-# ---------- /CONFIG ----------
+# ---------- BOT EVENTS ----------
+@bot.event
+async def on_ready():
+    """Événement quand le bot est prêt"""
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Connecté en tant que : {bot.user}")
+        print(f"✅ {len(synced)} commande(s) slash synchronisée(s)")
+        print(f"✅ Serveurs: {len(bot.guilds)}")
+        print(f"✅ Health check actif sur le port {os.environ.get('PORT', 10000)}")
+        print("🚀 Bot prêt à fonctionner!")
+    except Exception as e:
+        print(f"❌ Erreur de synchronisation: {e}")
+
+# ---------- SLASH COMMANDS ----------
 @bot.tree.command(name="config", description="Configurer le bot (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
@@ -439,7 +501,6 @@ async def config(interaction: discord.Interaction,
         print(f"Erreur dans /config: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-# ---------- /BAN ----------
 @bot.tree.command(name="ban", description="Lancer un jugement de bannissement")
 @app_commands.describe(
     user="Utilisateur à juger",
@@ -533,7 +594,6 @@ async def ban(interaction: discord.Interaction, user: discord.Member, raison: st
         print(f"Erreur dans /ban: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-# ---------- /BANINFO ----------
 @bot.tree.command(name="baninfo", description="Voir les informations d'un bannissement")
 @app_commands.describe(user="Utilisateur banni")
 async def baninfo(interaction: discord.Interaction, user: discord.User):
@@ -553,7 +613,6 @@ async def baninfo(interaction: discord.Interaction, user: discord.User):
         print(f"Erreur dans /baninfo: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-# ---------- /AUTORISE (version toggle) ----------
 @bot.tree.command(name="autorise", description="Ajouter ou retirer l'autorisation d'un rôle (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
@@ -619,7 +678,6 @@ async def autorise(interaction: discord.Interaction, role: discord.Role, type: a
         print(f"Erreur dans /autorise: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-# ---------- /PROTECT ----------
 @bot.tree.command(name="protect", description="Protéger un utilisateur des jugements (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
@@ -661,7 +719,6 @@ async def protect(interaction: discord.Interaction, user: discord.Member, raison
         print(f"Erreur dans /protect: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-# ---------- /UNPROTECT ----------
 @bot.tree.command(name="unprotect", description="Retirer la protection d'un utilisateur (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
@@ -699,7 +756,6 @@ async def unprotect(interaction: discord.Interaction, user: discord.Member):
         print(f"Erreur dans /unprotect: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-# ---------- /PROTECTED ----------
 @bot.tree.command(name="protected", description="Voir la liste des utilisateurs protégés")
 async def protected(interaction: discord.Interaction):
     try:
@@ -718,7 +774,7 @@ async def protected(interaction: discord.Interaction):
             timestamp=datetime.now()
         )
 
-        for user_id, protected_by, reason, protected_at in protected_users[:10]:  # Limite à 10
+        for user_id, protected_by, reason, protected_at in protected_users[:10]:
             user = interaction.guild.get_member(user_id)
             protector = interaction.guild.get_member(protected_by)
 
@@ -741,7 +797,6 @@ async def protected(interaction: discord.Interaction):
         print(f"Erreur dans /protected: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-# ---------- COMMANDE INFO ----------
 @bot.tree.command(name="info", description="Voir la configuration actuelle")
 async def info(interaction: discord.Interaction):
     try:
@@ -807,7 +862,7 @@ async def info(interaction: discord.Interaction):
         print(f"Erreur dans /info: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-# ---------- GESTION D'ERREURS ----------
+# ---------- ERROR HANDLING ----------
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error):
     try:
@@ -821,13 +876,10 @@ async def on_app_command_error(interaction: discord.Interaction, error):
     except:
         pass
 
-# ---------- RUN ----------
-if __name__ == "__main__":
-    if not TOKEN:
-        print("❌ ERREUR : Le token Discord n'est pas défini.")
-        print("Assurez-vous de définir la variable d'environnement DISCORD_TOKEN ou TOKEN")
-    else:
-        try:
-            bot.run(TOKEN)
-        except Exception as e:
-            print(f"❌ Erreur de démarrage: {e}")
+# ---------- START BOT ----------
+print("🤖 Démarrage du bot Discord...")
+try:
+    bot.run(TOKEN)
+except Exception as e:
+    print(f"❌ Erreur de démarrage: {e}")
+    print("Vérifie que le token DISCORD_TOKEN est correct")
