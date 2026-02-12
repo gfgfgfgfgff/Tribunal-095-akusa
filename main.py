@@ -8,23 +8,23 @@ from datetime import datetime
 from typing import Optional
 import signal
 
-# ========== HEALTH CHECK SERVER AMÉLIORÉ ==========
+# ========== HEALTH CHECK SERVER AMELIORE ==========
 class HealthHandler(BaseHTTPRequestHandler):
     """Handler pour les health checks HTTP"""
     def do_GET(self):
         if self.path == '/':
             self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
+            self.send_header('Content-type', 'text/plain; charset=utf-8')
             self.end_headers()
-            self.wfile.write('🤖 Bot Discord Tribunal en ligne!'.encode('utf-8'))
+            self.wfile.write(b'Bot Discord Tribunal en ligne!')
         elif self.path == '/health':
             self.send_response(200)
-            self.send_header('Content-type', 'application/json')
+            self.send_header('Content-type', 'application/json; charset=utf-8')
             self.end_headers()
             self.wfile.write(b'{"status": "ok", "service": "discord-bot"}')
         else:
             self.send_response(200)
-            self.send_header('Content-type', 'text/plain')
+            self.send_header('Content-type', 'text/plain; charset=utf-8')
             self.end_headers()
             self.wfile.write(b'Bot Discord Tribunal')
     
@@ -35,12 +35,12 @@ def start_health_server():
     try:
         port = int(os.environ.get('PORT', 10000))
         server = HTTPServer(('0.0.0.0', port), HealthHandler)
-        print(f"✅ Serveur health check démarré sur le port {port}")
+        print(f"✅ Serveur health check demarre sur le port {port}")
         print(f"✅ URL: http://0.0.0.0:{port}/")
         sys.stdout.flush()
         
         def shutdown(signum, frame):
-            print("🔴 Arrêt du serveur health check...")
+            print("🔴 Arret du serveur health check...")
             server.shutdown()
         
         signal.signal(signal.SIGTERM, shutdown)
@@ -49,11 +49,11 @@ def start_health_server():
         print(f"❌ Erreur serveur health check: {e}")
         sys.stdout.flush()
 
-print("🚀 Démarrage du health check...")
+print("🚀 Demarrage du health check...")
 health_thread = threading.Thread(target=start_health_server, daemon=True)
 health_thread.start()
 time.sleep(2)
-print("✅ Health check prêt")
+print("✅ Health check pret")
 # ========== FIN HEALTH CHECK ==========
 
 # ========== IMPORTS DISCORD ==========
@@ -63,9 +63,9 @@ from discord import app_commands
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 if not TOKEN:
-    print("❌ ERREUR: DISCORD_TOKEN non défini!")
+    print("❌ ERREUR: DISCORD_TOKEN non defini!")
     print("Configure la variable d'environnement DISCORD_TOKEN sur Render")
-    print("⚠️ Le bot Discord ne démarrera pas, mais le health check est actif")
+    print("⚠️ Le bot Discord ne demarrera pas, mais le health check est actif")
 
 # ========== ADMIN ID ==========
 ADMIN_USER_ID = 1399234120214909010  # ← REMPLACE PAR TON ID DISCORD
@@ -110,7 +110,7 @@ def init_db():
     return db, cursor
 
 db, cursor = init_db()
-print("✅ Base de données initialisée")
+print("✅ Base de donnees initialisee")
 
 def get_roles(guild_id: int, role_type: str):
     try:
@@ -232,7 +232,7 @@ intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix=">", intents=intents)
+bot = commands.Bot(command_prefix=[">", "!"], intents=intents)
 
 # ---------- TRIBUNAL VIEW ----------
 class TribunalView(discord.ui.View):
@@ -260,11 +260,11 @@ class TribunalView(discord.ui.View):
         embed.set_thumbnail(url=self.original_embed.thumbnail.url)
 
         for field in self.original_embed.fields:
-            if field.name not in ["Pour :", "Contre :", "⚖️ État du jugement"]:
+            if field.name not in ["Pour :", "Contre :", "⚖️ Etat du jugement"]:
                 embed.add_field(name=field.name, value=field.value, inline=field.inline)
 
         embed.add_field(
-            name="⚖️ État du jugement",
+            name="⚖️ Etat du jugement",
             value=f"✅ **OUI** ({len(self.votes_yes)}/3)\n{mentions_oui if mentions_oui != 'Aucun' else 'Aucun vote'}\n\n❌ **NON** ({len(self.votes_no)}/3)\n{mentions_non if mentions_non != 'Aucun' else 'Aucun vote'}",
             inline=False
         )
@@ -281,19 +281,19 @@ class TribunalView(discord.ui.View):
                 if accepted:
                     embed = discord.Embed(
                         title="",
-                        description=f"Le jugement de {self.target.mention} a été accepté",
+                        description=f"Le jugement de {self.target.mention} a ete accepte",
                         color=discord.Color.green(),
                         timestamp=datetime.now()
                     )
                 else:
                     embed = discord.Embed(
                         title="",
-                        description=f"Le jugement de {self.target.mention} a été refusé",
+                        description=f"Le jugement de {self.target.mention} a ete refuse",
                         color=discord.Color.red(),
                         timestamp=datetime.now()
                     )
 
-                embed.add_field(name="Modérateur", value=moderator.mention if moderator else "Inconnu", inline=False)
+                embed.add_field(name="Moderateur", value=moderator.mention if moderator else "Inconnu", inline=False)
                 embed.add_field(name="Votes pour", value=str(len(self.votes_yes)), inline=True)
                 embed.add_field(name="Votes contre", value=str(len(self.votes_no)), inline=True)
                 embed.add_field(name="Verdict", value=verdict, inline=False)
@@ -305,13 +305,13 @@ class TribunalView(discord.ui.View):
             try:
                 await self.target.ban(reason="Vote du tribunal (3 oui)")
                 embed = discord.Embed(
-                    title="🔨 VERDICT : BANNISSEMENT APPLIQUÉ",
-                    description=f"{self.target.mention} a été banni suite au vote du tribunal.",
+                    title="🔨 VERDICT : BANNISSEMENT APPLIQUE",
+                    description=f"{self.target.mention} a ete banni suite au vote du tribunal.",
                     color=discord.Color.red()
                 )
                 await interaction.message.edit(embed=embed, view=None)
                 self.has_concluded = True
-                await self.send_log("Bannissement appliqué (3 votes pour)", True, self.moderator)
+                await self.send_log("Bannissement applique (3 votes pour)", True, self.moderator)
             except discord.Forbidden:
                 embed = discord.Embed(
                     title="❌ ERREUR : Permission manquante",
@@ -322,20 +322,20 @@ class TribunalView(discord.ui.View):
                 self.has_concluded = True
         elif len(self.votes_no) >= 3:
             embed = discord.Embed(
-                title="❌ VERDICT : JUGEMENT ANNULÉ",
-                description="Le vote a abouti à un non-bannissement.",
+                title="❌ VERDICT : JUGEMENT ANNULE",
+                description="Le vote a abouti a un non-bannissement.",
                 color=discord.Color.green()
             )
             await interaction.message.edit(embed=embed, view=None)
             self.has_concluded = True
-            await self.send_log("Jugement annulé (3 votes contre)", False, self.moderator)
+            await self.send_log("Jugement annule (3 votes contre)", False, self.moderator)
         else:
             await self.update_embed(interaction.message)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.has_concluded:
             await interaction.response.send_message(
-                "❌ Ce jugement est déjà terminé.",
+                "❌ Ce jugement est deja termine.",
                 ephemeral=True
             )
             return False
@@ -344,42 +344,42 @@ class TribunalView(discord.ui.View):
     @discord.ui.button(label="Oui", emoji="✅", style=discord.ButtonStyle.success)
     async def oui(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not has_permission(interaction.user, "vote"):
-            return await interaction.response.send_message("Tu n'es pas autorisé à voter.", ephemeral=True)
+            return await interaction.response.send_message("Tu n'es pas autorise a voter.", ephemeral=True)
 
         if interaction.user.id in self.votes_yes | self.votes_no:
-            return await interaction.response.send_message("Tu as déjà voté.", ephemeral=True)
+            return await interaction.response.send_message("Tu as deja vote.", ephemeral=True)
 
         self.votes_yes.add(interaction.user.id)
 
-        await interaction.response.send_message("✅ Vote **OUI** enregistré!", ephemeral=True)
+        await interaction.response.send_message("✅ Vote **OUI** enregistre!", ephemeral=True)
         await self.check_verdict(interaction)
 
     @discord.ui.button(label="Non", emoji="❌", style=discord.ButtonStyle.danger)
     async def non(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not has_permission(interaction.user, "vote"):
-            return await interaction.response.send_message("Tu n'es pas autorisé à voter.", ephemeral=True)
+            return await interaction.response.send_message("Tu n'es pas autorise a voter.", ephemeral=True)
 
         if interaction.user.id in self.votes_yes | self.votes_no:
-            return await interaction.response.send_message("Tu as déjà voté.", ephemeral=True)
+            return await interaction.response.send_message("Tu as deja vote.", ephemeral=True)
 
         self.votes_no.add(interaction.user.id)
 
-        await interaction.response.send_message("❌ Vote **NON** enregistré!", ephemeral=True)
+        await interaction.response.send_message("❌ Vote **NON** enregistre!", ephemeral=True)
         await self.check_verdict(interaction)
 
     @discord.ui.button(label="Bannir", emoji="👨‍⚖️", style=discord.ButtonStyle.secondary)
     async def bannir(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not has_permission(interaction.user, "ban"):
             return await interaction.response.send_message(
-                "Tu n'as pas les permissions nécessaires pour appuyer sur ce bouton",
+                "Tu n'as pas les permissions necessaires pour appuyer sur ce bouton",
                 ephemeral=True
             )
 
         try:
             await self.target.ban(reason="Bannissement direct (juge)")
             embed = discord.Embed(
-                title="🔨 BANNISSEMENT DIRECT EXÉCUTÉ",
-                description=f"{self.target.mention} a été banni par {interaction.user.mention}.",
+                title="🔨 BANNISSEMENT DIRECT EXECUTE",
+                description=f"{self.target.mention} a ete banni par {interaction.user.mention}.",
                 color=discord.Color.red()
             )
             await interaction.message.edit(embed=embed, view=None)
@@ -392,11 +392,11 @@ class TribunalView(discord.ui.View):
                 if channel:
                     embed_log = discord.Embed(
                         title="",
-                        description=f"Le jugement de {self.target.mention} a été accepté",
+                        description=f"Le jugement de {self.target.mention} a ete accepte",
                         color=discord.Color.green(),
                         timestamp=datetime.now()
                     )
-                    embed_log.add_field(name="Modérateur", value=interaction.user.mention, inline=False)
+                    embed_log.add_field(name="Moderateur", value=interaction.user.mention, inline=False)
                     embed_log.add_field(name="Type", value="Bannissement direct", inline=False)
                     embed_log.add_field(name="Raison", value="Bannissement par un juge", inline=False)
                     await channel.send(embed=embed_log)
@@ -411,11 +411,11 @@ class TribunalView(discord.ui.View):
 async def on_ready():
     try:
         synced = await bot.tree.sync()
-        print(f"✅ Connecté en tant que : {bot.user}")
-        print(f"✅ {len(synced)} commande(s) slash synchronisée(s)")
+        print(f"✅ Connecte en tant que : {bot.user}")
+        print(f"✅ {len(synced)} commande(s) slash synchronisee(s)")
         print(f"✅ Serveurs: {len(bot.guilds)}")
         print(f"✅ Health check actif sur le port {os.environ.get('PORT', 10000)}")
-        print("🚀 Bot prêt à fonctionner!")
+        print("🚀 Bot pret a fonctionner!")
         
         port = os.environ.get('PORT', 10000)
         print(f"🌐 Health check URL: https://tribunal-095-akusa.onrender.com/")
@@ -426,9 +426,9 @@ async def on_ready():
 @bot.tree.command(name="config", description="Configurer le bot (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
-    salon_jugement="Salon où envoyer les jugements",
-    salon_logs="Salon où envoyer les logs",
-    role_mentionner="Rôle à mentionner à chaque jugement"
+    salon_jugement="Salon ou envoyer les jugements",
+    salon_logs="Salon ou envoyer les logs",
+    role_mentionner="Role a mentionner a chaque jugement"
 )
 async def config(interaction: discord.Interaction, 
                 salon_jugement: Optional[discord.TextChannel] = None, 
@@ -439,7 +439,7 @@ async def config(interaction: discord.Interaction,
         if salon_jugement is None and salon_logs is None and role_mentionner is None:
             cursor.execute("DELETE FROM config WHERE guild_id = ?", (interaction.guild_id,))
             db.commit()
-            await interaction.response.send_message("✅ Configuration réinitialisée.", ephemeral=True)
+            await interaction.response.send_message("✅ Configuration reinitialisee.", ephemeral=True)
             return
 
         set_config(interaction.guild_id, 
@@ -448,7 +448,7 @@ async def config(interaction: discord.Interaction,
                    mention_role_id=role_mentionner.id if role_mentionner else None)
 
         embed = discord.Embed(
-            title="⚙️ Configuration mise à jour",
+            title="⚙️ Configuration mise a jour",
             color=discord.Color.blue(),
             timestamp=datetime.now()
         )
@@ -460,23 +460,23 @@ async def config(interaction: discord.Interaction,
         elif config_info.get("ban_channel_id"):
             channel = interaction.guild.get_channel(config_info["ban_channel_id"])
             if channel:
-                embed.add_field(name="📁 Salon de jugement", value=f"{channel.mention} (inchangé)", inline=False)
+                embed.add_field(name="📁 Salon de jugement", value=f"{channel.mention} (inchange)", inline=False)
 
         if salon_logs:
             embed.add_field(name="📋 Salon des logs", value=salon_logs.mention, inline=False)
         elif config_info.get("log_channel_id"):
             channel = interaction.guild.get_channel(config_info["log_channel_id"])
             if channel:
-                embed.add_field(name="📋 Salon des logs", value=f"{channel.mention} (inchangé)", inline=False)
+                embed.add_field(name="📋 Salon des logs", value=f"{channel.mention} (inchange)", inline=False)
 
         if role_mentionner:
-            embed.add_field(name="👥 Rôle à mentionner", value=role_mentionner.mention, inline=False)
+            embed.add_field(name="👥 Role a mentionner", value=role_mentionner.mention, inline=False)
         elif config_info.get("mention_role_id"):
             role = interaction.guild.get_role(config_info["mention_role_id"])
             if role:
-                embed.add_field(name="👥 Rôle à mentionner", value=f"{role.mention} (inchangé)", inline=False)
+                embed.add_field(name="👥 Role a mentionner", value=f"{role.mention} (inchange)", inline=False)
 
-        embed.set_footer(text=f"Configuré par {interaction.user}")
+        embed.set_footer(text=f"Configure par {interaction.user}")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     except Exception as e:
@@ -485,15 +485,15 @@ async def config(interaction: discord.Interaction,
 
 @bot.tree.command(name="ban", description="Lancer un jugement de bannissement")
 @app_commands.describe(
-    user="Utilisateur à juger",
+    user="Utilisateur a juger",
     raison="Raison du bannissement",
-    preuve="Image ou vidéo comme preuve"
+    preuve="Image ou video comme preuve"
 )
 async def ban(interaction: discord.Interaction, user: discord.Member, raison: str, preuve: discord.Attachment):
     try:
         if is_user_protected(interaction.guild_id, user.id):
             return await interaction.response.send_message(
-                "❌ Vous ne pouvez pas lancer un jugement pour un membre protégé.",
+                "❌ Vous ne pouvez pas lancer un jugement pour un membre protege.",
                 ephemeral=True
             )
 
@@ -511,7 +511,7 @@ async def ban(interaction: discord.Interaction, user: discord.Member, raison: st
 
         if preuve.content_type not in valid_content_types:
             return await interaction.response.send_message(
-                f"❌ Le fichier doit être une image ou une vidéo! Type reçu: {preuve.content_type}", 
+                f"❌ Le fichier doit etre une image ou une video! Type recu: {preuve.content_type}", 
                 ephemeral=True
             )
 
@@ -522,11 +522,11 @@ async def ban(interaction: discord.Interaction, user: discord.Member, raison: st
         )
 
         embed.set_thumbnail(url=user.display_avatar.url)
-        embed.add_field(name="👮 Modérateur", value=interaction.user.mention, inline=False)
-        embed.add_field(name="🦹 Accusé", value=user.mention, inline=False)
+        embed.add_field(name="👮 Moderateur", value=interaction.user.mention, inline=False)
+        embed.add_field(name="🦹 Accuse", value=user.mention, inline=False)
         embed.add_field(name="📋 Raison", value=raison, inline=False)
         embed.add_field(name="📁 Preuve", value=f"[Cliquez ici pour voir la preuve]({preuve.url})", inline=False)
-        embed.add_field(name="⚖️ État du jugement", 
+        embed.add_field(name="⚖️ Etat du jugement", 
                        value=f"✅ **OUI** (0/3)\nAucun vote\n\n❌ **NON** (0/3)\nAucun vote", 
                        inline=False)
         embed.set_footer(text="Tribunal du serveur • Utilisez les boutons pour voter")
@@ -548,13 +548,13 @@ async def ban(interaction: discord.Interaction, user: discord.Member, raison: st
             else:
                 salon_nom = "le salon courant"
                 await interaction.followup.send(
-                    "⚠️ Le salon configuré n'existe plus. Le jugement a été envoyé ici.", 
+                    "⚠️ Le salon configure n'existe plus. Le jugement a ete envoye ici.", 
                     ephemeral=True
                 )
         else:
             salon_nom = "le salon courant"
 
-        await interaction.response.send_message(f"**Jugement** lancé dans {salon_nom}.", ephemeral=True)
+        await interaction.response.send_message(f"**Jugement** lance dans {salon_nom}.", ephemeral=True)
 
         view = TribunalView(user, embed, preuve.url, interaction.user)
 
@@ -586,10 +586,10 @@ async def baninfo(interaction: discord.Interaction, user: discord.User):
         print(f"Erreur dans /baninfo: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-@bot.tree.command(name="autorise", description="Ajouter ou retirer l'autorisation d'un rôle (ADMIN)")
+@bot.tree.command(name="autorise", description="Ajouter ou retirer l'autorisation d'un role (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
-    role="Rôle à autoriser/désautoriser", 
+    role="Role a autoriser/desautoriser", 
     type="Type de permission"
 )
 @app_commands.choices(type=[
@@ -611,21 +611,21 @@ async def autorise(interaction: discord.Interaction, role: discord.Role, type: a
                 "DELETE FROM guild_roles WHERE guild_id = ? AND role_id = ? AND role_type = ?",
                 (interaction.guild_id, role.id, type.value)
             )
-            action = "désautorisé"
+            action = "desautorise"
             color = discord.Color.orange()
         else:
             cursor.execute(
                 "INSERT INTO guild_roles (guild_id, role_id, role_type) VALUES (?, ?, ?)",
                 (interaction.guild_id, role.id, type.value)
             )
-            action = "autorisé"
+            action = "autorise"
             color = discord.Color.green()
 
         db.commit()
 
         embed = discord.Embed(
-            title="⚙️ Autorisation modifiée",
-            description=f"{role.mention} a été **{action}** pour **{type.value}**.",
+            title="⚙️ Autorisation modifiee",
+            description=f"{role.mention} a ete **{action}** pour **{type.value}**.",
             color=color,
             timestamp=datetime.now()
         )
@@ -634,7 +634,7 @@ async def autorise(interaction: discord.Interaction, role: discord.Role, type: a
         if current_roles:
             roles_mentions = " ".join([f"<@&{role_id}>" for role_id in current_roles])
             embed.add_field(
-                name=f"Rôles actuellement autorisés ({type.value})",
+                name=f"Roles actuellement autorises ({type.value})",
                 value=roles_mentions,
                 inline=False
             )
@@ -646,24 +646,24 @@ async def autorise(interaction: discord.Interaction, role: discord.Role, type: a
         print(f"Erreur dans /autorise: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-@bot.tree.command(name="protect", description="Protéger un utilisateur des jugements (ADMIN)")
+@bot.tree.command(name="protect", description="Proteger un utilisateur des jugements (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
-    user="Utilisateur à protéger",
+    user="Utilisateur a proteger",
     raison="Raison de la protection (optionnel)"
 )
 async def protect(interaction: discord.Interaction, user: discord.Member, raison: Optional[str] = ""):
     try:
         if is_user_protected(interaction.guild_id, user.id):
             return await interaction.response.send_message(
-                f"❌ {user.mention} est déjà protégé.", 
+                f"❌ {user.mention} est deja protege.", 
                 ephemeral=True
             )
 
         if add_protected_user(interaction.guild_id, user.id, interaction.user.id, raison):
             embed = discord.Embed(
-                title="🛡️ Utilisateur protégé",
-                description=f"{user.mention} est maintenant protégé des jugements.",
+                title="🛡️ Utilisateur protege",
+                description=f"{user.mention} est maintenant protege des jugements.",
                 color=discord.Color.green(),
                 timestamp=datetime.now()
             )
@@ -671,7 +671,7 @@ async def protect(interaction: discord.Interaction, user: discord.Member, raison
             if raison:
                 embed.add_field(name="Raison", value=raison, inline=False)
 
-            embed.add_field(name="Protégé par", value=interaction.user.mention, inline=False)
+            embed.add_field(name="Protege par", value=interaction.user.mention, inline=False)
             embed.set_footer(text=f"ID: {user.id}")
 
             await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -688,25 +688,25 @@ async def protect(interaction: discord.Interaction, user: discord.Member, raison
 @bot.tree.command(name="unprotect", description="Retirer la protection d'un utilisateur (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
 @app_commands.describe(
-    user="Utilisateur à déprotéger"
+    user="Utilisateur a depreteger"
 )
 async def unprotect(interaction: discord.Interaction, user: discord.Member):
     try:
         if not is_user_protected(interaction.guild_id, user.id):
             return await interaction.response.send_message(
-                f"❌ {user.mention} n'est pas protégé.", 
+                f"❌ {user.mention} n'est pas protege.", 
                 ephemeral=True
             )
 
         if remove_protected_user(interaction.guild_id, user.id):
             embed = discord.Embed(
-                title="🛡️ Protection retirée",
-                description=f"{user.mention} n'est plus protégé des jugements.",
+                title="🛡️ Protection retiree",
+                description=f"{user.mention} n'est plus protege des jugements.",
                 color=discord.Color.orange(),
                 timestamp=datetime.now()
             )
 
-            embed.add_field(name="Retiré par", value=interaction.user.mention, inline=False)
+            embed.add_field(name="Retire par", value=interaction.user.mention, inline=False)
             embed.set_footer(text=f"ID: {user.id}")
 
             await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -720,20 +720,20 @@ async def unprotect(interaction: discord.Interaction, user: discord.Member):
         print(f"Erreur dans /unprotect: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-@bot.tree.command(name="protected", description="Voir la liste des utilisateurs protégés")
+@bot.tree.command(name="protected", description="Voir la liste des utilisateurs proteges")
 async def protected(interaction: discord.Interaction):
     try:
         protected_users = get_protected_users(interaction.guild_id)
 
         if not protected_users:
             return await interaction.response.send_message(
-                "Aucun utilisateur n'est actuellement protégé.", 
+                "Aucun utilisateur n'est actuellement protege.", 
                 ephemeral=True
             )
 
         embed = discord.Embed(
-            title="🛡️ Utilisateurs protégés",
-            description=f"{len(protected_users)} utilisateur(s) protégé(s)",
+            title="🛡️ Utilisateurs proteges",
+            description=f"{len(protected_users)} utilisateur(s) protege(s)",
             color=discord.Color.blue(),
             timestamp=datetime.now()
         )
@@ -742,13 +742,13 @@ async def protected(interaction: discord.Interaction):
             user = interaction.guild.get_member(user_id)
             protector = interaction.guild.get_member(protected_by)
 
-            user_display = user.mention if user else f"`{user_id}` (non présent)"
+            user_display = user.mention if user else f"`{user_id}` (non present)"
             protector_display = protector.mention if protector else f"`{protected_by}`"
             reason_display = reason if reason else "Aucune raison fournie"
 
             embed.add_field(
                 name=user_display,
-                value=f"**Protégé par:** {protector_display}\n**Raison:** {reason_display}\n**Depuis:** <t:{int(datetime.fromisoformat(protected_at).timestamp())}:R>",
+                value=f"**Protege par:** {protector_display}\n**Raison:** {reason_display}\n**Depuis:** <t:{int(datetime.fromisoformat(protected_at).timestamp())}:R>",
                 inline=False
             )
 
@@ -785,36 +785,36 @@ async def info(interaction: discord.Interaction):
             channel = interaction.guild.get_channel(config_info["ban_channel_id"])
             ban_channel_info = channel.mention if channel else "❌ Salon introuvable"
 
-        log_channel_info = "Non configuré"
+        log_channel_info = "Non configure"
         if config_info.get("log_channel_id"):
             channel = interaction.guild.get_channel(config_info["log_channel_id"])
             log_channel_info = channel.mention if channel else "❌ Salon introuvable"
 
-        mention_role_info = "Non configuré"
+        mention_role_info = "Non configure"
         if config_info.get("mention_role_id"):
             role = interaction.guild.get_role(config_info["mention_role_id"])
-            mention_role_info = role.mention if role else "❌ Rôle introuvable"
+            mention_role_info = role.mention if role else "❌ Role introuvable"
 
-        embed.add_field(name="👥 Rôles pouvant voter", value=vote_roles_mentions, inline=False)
-        embed.add_field(name="⚖️ Rôles pouvant bannir", value=ban_roles_mentions, inline=False)
-        embed.add_field(name="🎯 Rôles pouvant lancer un jugement", value=jugement_roles_mentions, inline=False)
+        embed.add_field(name="👥 Roles pouvant voter", value=vote_roles_mentions, inline=False)
+        embed.add_field(name="⚖️ Roles pouvant bannir", value=ban_roles_mentions, inline=False)
+        embed.add_field(name="🎯 Roles pouvant lancer un jugement", value=jugement_roles_mentions, inline=False)
         embed.add_field(name="📁 Salon de jugement", value=ban_channel_info, inline=False)
         embed.add_field(name="📋 Salon des logs", value=log_channel_info, inline=False)
-        embed.add_field(name="👥 Rôle à mentionner", value=mention_role_info, inline=False)
-        embed.add_field(name="🛡️ Utilisateurs protégés", value=f"{protected_count} utilisateur(s)", inline=False)
+        embed.add_field(name="👥 Role a mentionner", value=mention_role_info, inline=False)
+        embed.add_field(name="🛡️ Utilisateurs proteges", value=f"{protected_count} utilisateur(s)", inline=False)
 
         embed.add_field(name="📜 Commandes disponibles", value="""
 `/ban` - Lancer un jugement
 `/baninfo` - Voir infos bannissement
-`/autorise` - Autoriser/désautoriser un rôle (admin)
+`/autorise` - Autoriser/desautoriser un role (admin)
 `/config` - Configurer les salons (admin)
-`/protect` - Protéger un utilisateur (admin)
+`/protect` - Proteger un utilisateur (admin)
 `/unprotect` - Retirer la protection (admin)
-`/protected` - Voir les protégés
+`/protected` - Voir les proteges
 `/info` - Voir cette configuration
 """, inline=False)
 
-        embed.set_footer(text=f"Demandé par {interaction.user}")
+        embed.set_footer(text=f"Demande par {interaction.user}")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     except Exception as e:
@@ -825,12 +825,12 @@ async def info(interaction: discord.Interaction):
 @bot.command(name=">savedb")
 @commands.check(lambda ctx: ctx.author.id == ADMIN_USER_ID)
 async def savedb(ctx):
-    """Sauvegarde la base de données et l'envoie en DM"""
+    """Sauvegarde la base de donnees et l'envoie en DM"""
     try:
         await ctx.author.send(file=discord.File('data.db'))
         embed = discord.Embed(
-            title="✅ Base de données sauvegardée",
-            description="Le fichier `data.db` a été envoyé dans tes DM.",
+            title="✅ Base de donnees sauvegardee",
+            description="Le fichier `data.db` a ete envoye dans tes DM.",
             color=0x00FF00
         )
         await ctx.send(embed=embed)
@@ -838,7 +838,7 @@ async def savedb(ctx):
         print(f"Erreur savedb: {e}")
         embed = discord.Embed(
             title="❌ Erreur",
-            description="Impossible d'envoyer la base de données. Vérifie que tes DM sont ouverts.",
+            description="Impossible d'envoyer la base de donnees. Verifie que tes DM sont ouverts.",
             color=0xFF0000
         )
         await ctx.send(embed=embed)
@@ -846,11 +846,11 @@ async def savedb(ctx):
 @bot.command(name=">setdb")
 @commands.check(lambda ctx: ctx.author.id == ADMIN_USER_ID)
 async def setdb(ctx):
-    """Restaure la base de données depuis un fichier attaché"""
+    """Restaure la base de donnees depuis un fichier attache"""
     if not ctx.message.attachments:
         embed = discord.Embed(
             title="❌ Aucun fichier",
-            description="Veuillez attacher un fichier `data.db` à votre message.",
+            description="Veuillez attacher un fichier `data.db` a votre message.",
             color=0xFF0000
         )
         return await ctx.send(embed=embed)
@@ -862,8 +862,8 @@ async def setdb(ctx):
         db, cursor = init_db()
         
         embed = discord.Embed(
-            title="✅ Base de données restaurée",
-            description="Le fichier `data.db` a été remplacé avec succès.",
+            title="✅ Base de donnees restauree",
+            description="Le fichier `data.db` a ete remplace avec succes.",
             color=0x00FF00
         )
         await ctx.send(embed=embed)
@@ -872,7 +872,7 @@ async def setdb(ctx):
         print(f"Erreur setdb: {e}")
         embed = discord.Embed(
             title="❌ Erreur",
-            description="Impossible de restaurer la base de données.",
+            description="Impossible de restaurer la base de donnees.",
             color=0xFF0000
         )
         await ctx.send(embed=embed)
@@ -882,7 +882,7 @@ async def setdb(ctx):
 async def on_app_command_error(interaction: discord.Interaction, error):
     try:
         if isinstance(error, app_commands.errors.MissingPermissions):
-            await interaction.response.send_message("❌ Tu n'as pas les permissions nécessaires.", ephemeral=True)
+            await interaction.response.send_message("❌ Tu n'as pas les permissions necessaires.", ephemeral=True)
         elif isinstance(error, app_commands.errors.CommandNotFound):
             await interaction.response.send_message("❌ Commande introuvable.", ephemeral=True)
         else:
@@ -892,7 +892,7 @@ async def on_app_command_error(interaction: discord.Interaction, error):
         pass
 
 # ---------- START BOT ----------
-print("🤖 Démarrage du bot Discord...")
+print("🤖 Demarrage du bot Discord...")
 try:
     if TOKEN:
         bot.run(TOKEN)
@@ -901,10 +901,10 @@ try:
         while True:
             time.sleep(60)
 except Exception as e:
-    print(f"❌ Erreur de démarrage du bot: {e}")
+    print(f"❌ Erreur de demarrage du bot: {e}")
     print("⚠️ Le health check reste actif")
     try:
         while True:
             time.sleep(60)
     except KeyboardInterrupt:
-        print("🔴 Arrêt du script")
+        print("🔴 Arret du script")
