@@ -19,7 +19,6 @@ if sys.version_info >= (3, 13):
 
 # ========== HEALTH CHECK SERVER ==========
 class HealthHandler(BaseHTTPRequestHandler):
-    """Handler pour les health checks HTTP"""
     def do_GET(self):
         if self.path == '/':
             self.send_response(200)
@@ -36,22 +35,15 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'text/plain; charset=utf-8')
             self.end_headers()
             self.wfile.write(b'Bot Discord Tribunal')
-    
-    def log_message(self, format, *args):
-        pass
+    def log_message(self, format, *args): pass
 
 def start_health_server():
     try:
         port = int(os.environ.get('PORT', 10000))
         server = HTTPServer(('0.0.0.0', port), HealthHandler)
         print(f"✅ Serveur health check demarre sur le port {port}")
-        print(f"✅ URL: http://0.0.0.0:{port}/")
         sys.stdout.flush()
-        
-        def shutdown(signum, frame):
-            print("🔴 Arret du serveur health check...")
-            server.shutdown()
-        
+        def shutdown(signum, frame): server.shutdown()
         signal.signal(signal.SIGTERM, shutdown)
         server.serve_forever()
     except Exception as e:
@@ -59,13 +51,11 @@ def start_health_server():
         sys.stdout.flush()
 
 print("🚀 Demarrage du health check...")
-health_thread = threading.Thread(target=start_health_server, daemon=True)
-health_thread.start()
+threading.Thread(target=start_health_server, daemon=True).start()
 time.sleep(2)
 print("✅ Health check pret")
 # ========== FIN HEALTH CHECK ==========
 
-# ========== IMPORTS DISCORD ==========
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -73,48 +63,35 @@ from discord import app_commands
 TOKEN = os.getenv("DISCORD_TOKEN")
 if not TOKEN:
     print("❌ ERREUR: DISCORD_TOKEN non defini!")
-    print("Configure la variable d'environnement DISCORD_TOKEN sur Render")
     print("⚠️ Le bot Discord ne demarrera pas, mais le health check est actif")
 
-# ========== ADMIN ID ==========
-ADMIN_USER_ID = 1399234120214909010  # ← REMPLACE PAR TON ID DISCORD
+ADMIN_USER_ID = 1399234120214909010
 
 print("🔧 Initialisation du bot Discord...")
 
-# ---------- DATABASE FUNCTIONS ----------
 def init_db():
     db = sqlite3.connect("data.db", check_same_thread=False)
     cursor = db.cursor()
-
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS guild_roles (
-            guild_id INTEGER,
-            role_id INTEGER,
+            guild_id INTEGER, role_id INTEGER,
             role_type TEXT CHECK(role_type IN ('vote', 'ban', 'jugement')),
             PRIMARY KEY (guild_id, role_id, role_type)
         )
     """)
-
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS config (
             guild_id INTEGER PRIMARY KEY,
-            ban_channel_id INTEGER,
-            log_channel_id INTEGER,
-            mention_role_id INTEGER
+            ban_channel_id INTEGER, log_channel_id INTEGER, mention_role_id INTEGER
         )
     """)
-
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS protected_users (
-            guild_id INTEGER,
-            user_id INTEGER,
-            protected_by INTEGER,
-            protected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            reason TEXT DEFAULT '',
+            guild_id INTEGER, user_id INTEGER, protected_by INTEGER,
+            protected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, reason TEXT DEFAULT '',
             PRIMARY KEY (guild_id, user_id)
         )
     """)
-
     db.commit()
     return db, cursor
 
@@ -123,130 +100,69 @@ print("✅ Base de donnees initialisee")
 
 def get_roles(guild_id: int, role_type: str):
     try:
-        cursor.execute(
-            "SELECT role_id FROM guild_roles WHERE guild_id = ? AND role_type = ?",
-            (guild_id, role_type)
-        )
+        cursor.execute("SELECT role_id FROM guild_roles WHERE guild_id = ? AND role_type = ?", (guild_id, role_type))
         return [r[0] for r in cursor.fetchall()]
-    except Exception as e:
-        print(f"Erreur get_roles: {e}")
-        return []
+    except: return []
 
 def has_permission(member: discord.Member, role_type: str) -> bool:
-    if member.guild_permissions.administrator:
-        return True
-    allowed_roles = get_roles(member.guild.id, role_type)
-    return any(role.id in allowed_roles for role in member.roles)
+    if member.guild_permissions.administrator: return True
+    return any(role.id in get_roles(member.guild.id, role_type) for role in member.roles)
 
 def can_start_judgment(member: discord.Member) -> bool:
-    if member.guild_permissions.administrator:
-        return True
-    if has_permission(member, "jugement"):
-        return True
-    if has_permission(member, "ban"):
-        return True
-    return False
+    return member.guild_permissions.administrator or has_permission(member, "jugement") or has_permission(member, "ban")
 
 def is_user_protected(guild_id: int, user_id: int) -> bool:
     try:
-        cursor.execute(
-            "SELECT 1 FROM protected_users WHERE guild_id = ? AND user_id = ?",
-            (guild_id, user_id)
-        )
+        cursor.execute("SELECT 1 FROM protected_users WHERE guild_id = ? AND user_id = ?", (guild_id, user_id))
         return cursor.fetchone() is not None
-    except Exception as e:
-        print(f"Erreur is_user_protected: {e}")
-        return False
+    except: return False
 
 def add_protected_user(guild_id: int, user_id: int, protected_by: int, reason: str = ""):
     try:
-        cursor.execute(
-            "INSERT OR REPLACE INTO protected_users (guild_id, user_id, protected_by, reason) VALUES (?, ?, ?, ?)",
-            (guild_id, user_id, protected_by, reason)
-        )
+        cursor.execute("INSERT OR REPLACE INTO protected_users VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)", (guild_id, user_id, protected_by, reason))
         db.commit()
         return True
-    except Exception as e:
-        print(f"Erreur add_protected_user: {e}")
-        return False
+    except: return False
 
 def remove_protected_user(guild_id: int, user_id: int):
     try:
-        cursor.execute(
-            "DELETE FROM protected_users WHERE guild_id = ? AND user_id = ?",
-            (guild_id, user_id)
-        )
+        cursor.execute("DELETE FROM protected_users WHERE guild_id = ? AND user_id = ?", (guild_id, user_id))
         db.commit()
         return cursor.rowcount > 0
-    except Exception as e:
-        print(f"Erreur remove_protected_user: {e}")
-        return False
+    except: return False
 
 def get_protected_users(guild_id: int):
     try:
-        cursor.execute(
-            "SELECT user_id, protected_by, reason, protected_at FROM protected_users WHERE guild_id = ?",
-            (guild_id,)
-        )
+        cursor.execute("SELECT user_id, protected_by, reason, protected_at FROM protected_users WHERE guild_id = ?", (guild_id,))
         return cursor.fetchall()
-    except Exception as e:
-        print(f"Erreur get_protected_users: {e}")
-        return []
+    except: return []
 
 def get_config(guild_id: int) -> dict:
     try:
-        cursor.execute(
-            "SELECT ban_channel_id, log_channel_id, mention_role_id FROM config WHERE guild_id = ?",
-            (guild_id,)
-        )
-        result = cursor.fetchone()
-
-        if result:
-            return {
-                "ban_channel_id": result[0],
-                "log_channel_id": result[1],
-                "mention_role_id": result[2]
-            }
-    except Exception as e:
-        print(f"Erreur get_config: {e}")
-
-    return {
-        "ban_channel_id": None,
-        "log_channel_id": None,
-        "mention_role_id": None
-    }
+        cursor.execute("SELECT ban_channel_id, log_channel_id, mention_role_id FROM config WHERE guild_id = ?", (guild_id,))
+        r = cursor.fetchone()
+        if r: return {"ban_channel_id": r[0], "log_channel_id": r[1], "mention_role_id": r[2]}
+    except: pass
+    return {"ban_channel_id": None, "log_channel_id": None, "mention_role_id": None}
 
 def set_config(guild_id: int, **kwargs):
     try:
-        current = get_config(guild_id)
-        updates = {}
-        for key in ['ban_channel_id', 'log_channel_id', 'mention_role_id']:
-            updates[key] = kwargs.get(key, current.get(key))
-
-        cursor.execute("""
-            INSERT OR REPLACE INTO config 
-            (guild_id, ban_channel_id, log_channel_id, mention_role_id) 
-            VALUES (?, ?, ?, ?)
-        """, (guild_id, updates['ban_channel_id'], 
-              updates['log_channel_id'], updates['mention_role_id']))
-
+        c = get_config(guild_id)
+        cursor.execute("INSERT OR REPLACE INTO config VALUES (?, ?, ?, ?)",
+            (guild_id, kwargs.get('ban_channel_id', c['ban_channel_id']),
+             kwargs.get('log_channel_id', c['log_channel_id']),
+             kwargs.get('mention_role_id', c['mention_role_id'])))
         db.commit()
         return True
-    except Exception as e:
-        print(f"Erreur set_config: {e}")
-        return False
+    except: return False
 
-# ---------- BOT SETUP ----------
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
-
 bot = commands.Bot(command_prefix=[">", "!"], intents=intents)
 
-# ---------- TRIBUNAL VIEW ----------
 class TribunalView(discord.ui.View):
-    def __init__(self, target: discord.Member, original_embed: discord.Embed, 
-                 proof_url: str = None, moderator: discord.Member = None):
+    def __init__(self, target, original_embed, proof_url=None, moderator=None):
         super().__init__(timeout=None)
         self.target = target
         self.votes_yes = set()
@@ -257,663 +173,209 @@ class TribunalView(discord.ui.View):
         self.has_concluded = False
 
     async def update_embed(self, message):
-        mentions_oui = " ".join([f"<@{user_id}>" for user_id in self.votes_yes]) if self.votes_yes else "Aucun"
-        mentions_non = " ".join([f"<@{user_id}>" for user_id in self.votes_no]) if self.votes_no else "Aucun"
-
-        embed = discord.Embed(
-            title=self.original_embed.title,
-            color=self.original_embed.color,
-            timestamp=self.original_embed.timestamp
-        )
-
+        oui = " ".join(f"<@{uid}>" for uid in self.votes_yes) if self.votes_yes else "Aucun"
+        non = " ".join(f"<@{uid}>" for uid in self.votes_no) if self.votes_no else "Aucun"
+        embed = discord.Embed(title=self.original_embed.title, color=self.original_embed.color, timestamp=self.original_embed.timestamp)
         embed.set_thumbnail(url=self.original_embed.thumbnail.url)
-
-        for field in self.original_embed.fields:
-            if field.name not in ["Pour :", "Contre :", "⚖️ Etat du jugement"]:
-                embed.add_field(name=field.name, value=field.value, inline=field.inline)
-
-        embed.add_field(
-            name="⚖️ Etat du jugement",
-            value=f"✅ **OUI** ({len(self.votes_yes)}/3)\n{mentions_oui if mentions_oui != 'Aucun' else 'Aucun vote'}\n\n❌ **NON** ({len(self.votes_no)}/3)\n{mentions_non if mentions_non != 'Aucun' else 'Aucun vote'}",
-            inline=False
-        )
-
+        for f in self.original_embed.fields:
+            if f.name not in ["Pour :", "Contre :", "⚖️ Etat du jugement"]:
+                embed.add_field(name=f.name, value=f.value, inline=f.inline)
+        embed.add_field(name="⚖️ Etat du jugement", value=f"✅ **OUI** ({len(self.votes_yes)}/3)\n{oui}\n\n❌ **NON** ({len(self.votes_no)}/3)\n{non}", inline=False)
         await message.edit(embed=embed)
 
-    async def send_log(self, verdict: str, accepted: bool, moderator: discord.Member = None):
-        config = get_config(self.target.guild.id)
-        log_channel_id = config.get("log_channel_id")
-
-        if log_channel_id:
-            channel = self.target.guild.get_channel(log_channel_id)
-            if channel:
-                if accepted:
-                    embed = discord.Embed(
-                        title="",
-                        description=f"Le jugement de {self.target.mention} a ete accepte",
-                        color=discord.Color.green(),
-                        timestamp=datetime.now()
-                    )
-                else:
-                    embed = discord.Embed(
-                        title="",
-                        description=f"Le jugement de {self.target.mention} a ete refuse",
-                        color=discord.Color.red(),
-                        timestamp=datetime.now()
-                    )
-
-                embed.add_field(name="Moderateur", value=moderator.mention if moderator else "Inconnu", inline=False)
-                embed.add_field(name="Votes pour", value=str(len(self.votes_yes)), inline=True)
-                embed.add_field(name="Votes contre", value=str(len(self.votes_no)), inline=True)
-                embed.add_field(name="Verdict", value=verdict, inline=False)
-
-                await channel.send(embed=embed)
-
-    async def check_verdict(self, interaction: discord.Interaction):
+    async def check_verdict(self, i):
         if len(self.votes_yes) >= 3:
             try:
                 await self.target.ban(reason="Vote du tribunal (3 oui)")
-                embed = discord.Embed(
-                    title="🔨 VERDICT : BANNISSEMENT APPLIQUE",
-                    description=f"{self.target.mention} a ete banni suite au vote du tribunal.",
-                    color=discord.Color.red()
-                )
-                await interaction.message.edit(embed=embed, view=None)
+                await i.message.edit(embed=discord.Embed(title="🔨 VERDICT : BANNISSEMENT APPLIQUE", description=f"{self.target.mention} a ete banni.", color=discord.Color.red()), view=None)
                 self.has_concluded = True
-                await self.send_log("Bannissement applique (3 votes pour)", True, self.moderator)
-            except discord.Forbidden:
-                embed = discord.Embed(
-                    title="❌ ERREUR : Permission manquante",
-                    description="Je n'ai pas la permission de bannir cet utilisateur.",
-                    color=discord.Color.orange()
-                )
-                await interaction.message.edit(embed=embed, view=None)
-                self.has_concluded = True
+            except: await i.message.edit(embed=discord.Embed(title="❌ ERREUR", description="Permission manquante", color=discord.Color.orange()), view=None)
         elif len(self.votes_no) >= 3:
-            embed = discord.Embed(
-                title="❌ VERDICT : JUGEMENT ANNULE",
-                description="Le vote a abouti a un non-bannissement.",
-                color=discord.Color.green()
-            )
-            await interaction.message.edit(embed=embed, view=None)
+            await i.message.edit(embed=discord.Embed(title="❌ VERDICT : JUGEMENT ANNULE", description="Non-bannissement", color=discord.Color.green()), view=None)
             self.has_concluded = True
-            await self.send_log("Jugement annule (3 votes contre)", False, self.moderator)
-        else:
-            await self.update_embed(interaction.message)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if self.has_concluded:
-            await interaction.response.send_message(
-                "❌ Ce jugement est deja termine.",
-                ephemeral=True
-            )
-            return False
-        return True
+        else: await self.update_embed(i.message)
 
     @discord.ui.button(label="Oui", emoji="✅", style=discord.ButtonStyle.success)
-    async def oui(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not has_permission(interaction.user, "vote"):
-            return await interaction.response.send_message("Tu n'es pas autorise a voter.", ephemeral=True)
-
-        if interaction.user.id in self.votes_yes | self.votes_no:
-            return await interaction.response.send_message("Tu as deja vote.", ephemeral=True)
-
-        self.votes_yes.add(interaction.user.id)
-
-        await interaction.response.send_message("✅ Vote **OUI** enregistre!", ephemeral=True)
-        await self.check_verdict(interaction)
+    async def oui(self, i, b):
+        if not has_permission(i.user, "vote"): return await i.response.send_message("Non autorise.", ephemeral=True)
+        if i.user.id in self.votes_yes | self.votes_no: return await i.response.send_message("Deja vote.", ephemeral=True)
+        self.votes_yes.add(i.user.id)
+        await i.response.send_message("✅ Vote OUI enregistre!", ephemeral=True)
+        await self.check_verdict(i)
 
     @discord.ui.button(label="Non", emoji="❌", style=discord.ButtonStyle.danger)
-    async def non(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not has_permission(interaction.user, "vote"):
-            return await interaction.response.send_message("Tu n'es pas autorise a voter.", ephemeral=True)
-
-        if interaction.user.id in self.votes_yes | self.votes_no:
-            return await interaction.response.send_message("Tu as deja vote.", ephemeral=True)
-
-        self.votes_no.add(interaction.user.id)
-
-        await interaction.response.send_message("❌ Vote **NON** enregistre!", ephemeral=True)
-        await self.check_verdict(interaction)
+    async def non(self, i, b):
+        if not has_permission(i.user, "vote"): return await i.response.send_message("Non autorise.", ephemeral=True)
+        if i.user.id in self.votes_yes | self.votes_no: return await i.response.send_message("Deja vote.", ephemeral=True)
+        self.votes_no.add(i.user.id)
+        await i.response.send_message("❌ Vote NON enregistre!", ephemeral=True)
+        await self.check_verdict(i)
 
     @discord.ui.button(label="Bannir", emoji="👨‍⚖️", style=discord.ButtonStyle.secondary)
-    async def bannir(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not has_permission(interaction.user, "ban"):
-            return await interaction.response.send_message(
-                "Tu n'as pas les permissions necessaires pour appuyer sur ce bouton",
-                ephemeral=True
-            )
-
+    async def bannir(self, i, b):
+        if not has_permission(i.user, "ban"): return await i.response.send_message("Non autorise.", ephemeral=True)
         try:
-            await self.target.ban(reason="Bannissement direct (juge)")
-            embed = discord.Embed(
-                title="🔨 BANNISSEMENT DIRECT EXECUTE",
-                description=f"{self.target.mention} a ete banni par {interaction.user.mention}.",
-                color=discord.Color.red()
-            )
-            await interaction.message.edit(embed=embed, view=None)
-            self.has_concluded = True
+            await self.target.ban(reason="Bannissement direct")
+            await i.message.edit(embed=discord.Embed(title="🔨 BANNISSEMENT DIRECT", description=f"{self.target.mention} banni par {i.user.mention}", color=discord.Color.red()), view=None)
+        except: await i.response.send_message("❌ Permission manquante.", ephemeral=True)
 
-            config = get_config(self.target.guild.id)
-            log_channel_id = config.get("log_channel_id")
-            if log_channel_id:
-                channel = self.target.guild.get_channel(log_channel_id)
-                if channel:
-                    embed_log = discord.Embed(
-                        title="",
-                        description=f"Le jugement de {self.target.mention} a ete accepte",
-                        color=discord.Color.green(),
-                        timestamp=datetime.now()
-                    )
-                    embed_log.add_field(name="Moderateur", value=interaction.user.mention, inline=False)
-                    embed_log.add_field(name="Type", value="Bannissement direct", inline=False)
-                    embed_log.add_field(name="Raison", value="Bannissement par un juge", inline=False)
-                    await channel.send(embed=embed_log)
-        except discord.Forbidden:
-            await interaction.response.send_message(
-                "❌ Je n'ai pas la permission de bannir cet utilisateur.",
-                ephemeral=True
-            )
-
-# ---------- BOT EVENTS ----------
 @bot.event
 async def on_ready():
     try:
         synced = await bot.tree.sync()
-        print(f"✅ Connecte en tant que : {bot.user}")
-        print(f"✅ {len(synced)} commande(s) slash synchronisee(s)")
+        print(f"✅ Connecte: {bot.user}")
+        print(f"✅ {len(synced)} commandes slash")
         print(f"✅ Serveurs: {len(bot.guilds)}")
-        print(f"✅ Health check actif sur le port {os.environ.get('PORT', 10000)}")
-        print("🚀 Bot pret a fonctionner!")
-        
-        port = os.environ.get('PORT', 10000)
-        print(f"🌐 Health check URL: https://tribunal-095-akusa.onrender.com/")
-    except Exception as e:
-        print(f"❌ Erreur de synchronisation: {e}")
+    except Exception as e: print(f"❌ Erreur sync: {e}")
 
-# ---------- SLASH COMMANDS ----------
+# ========== SLASH COMMANDS ==========
 @bot.tree.command(name="config", description="Configurer le bot (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(
-    salon_jugement="Salon ou envoyer les jugements",
-    salon_logs="Salon ou envoyer les logs",
-    role_mentionner="Role a mentionner a chaque jugement"
-)
-async def config(interaction: discord.Interaction, 
-                salon_jugement: Optional[discord.TextChannel] = None, 
-                salon_logs: Optional[discord.TextChannel] = None,
-                role_mentionner: Optional[discord.Role] = None):
-
+async def config(i, salon_jugement: Optional[discord.TextChannel]=None, salon_logs: Optional[discord.TextChannel]=None, role_mentionner: Optional[discord.Role]=None):
     try:
-        if salon_jugement is None and salon_logs is None and role_mentionner is None:
-            cursor.execute("DELETE FROM config WHERE guild_id = ?", (interaction.guild_id,))
-            db.commit()
-            await interaction.response.send_message("✅ Configuration reinitialisee.", ephemeral=True)
-            return
+        if not any([salon_jugement, salon_logs, role_mentionner]):
+            cursor.execute("DELETE FROM config WHERE guild_id = ?", (i.guild_id,)); db.commit()
+            return await i.response.send_message("✅ Configuration reinitialisee.", ephemeral=True)
+        set_config(i.guild_id, ban_channel_id=salon_jugement.id if salon_jugement else None,
+                  log_channel_id=salon_logs.id if salon_logs else None,
+                  mention_role_id=role_mentionner.id if role_mentionner else None)
+        await i.response.send_message("✅ Configuration mise a jour.", ephemeral=True)
+    except Exception as e: await i.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-        set_config(interaction.guild_id, 
-                   ban_channel_id=salon_jugement.id if salon_jugement else None,
-                   log_channel_id=salon_logs.id if salon_logs else None,
-                   mention_role_id=role_mentionner.id if role_mentionner else None)
-
-        embed = discord.Embed(
-            title="⚙️ Configuration mise a jour",
-            color=discord.Color.blue(),
-            timestamp=datetime.now()
-        )
-
-        config_info = get_config(interaction.guild_id)
-
-        if salon_jugement:
-            embed.add_field(name="📁 Salon de jugement", value=salon_jugement.mention, inline=False)
-        elif config_info.get("ban_channel_id"):
-            channel = interaction.guild.get_channel(config_info["ban_channel_id"])
-            if channel:
-                embed.add_field(name="📁 Salon de jugement", value=f"{channel.mention} (inchange)", inline=False)
-
-        if salon_logs:
-            embed.add_field(name="📋 Salon des logs", value=salon_logs.mention, inline=False)
-        elif config_info.get("log_channel_id"):
-            channel = interaction.guild.get_channel(config_info["log_channel_id"])
-            if channel:
-                embed.add_field(name="📋 Salon des logs", value=f"{channel.mention} (inchange)", inline=False)
-
-        if role_mentionner:
-            embed.add_field(name="👥 Role a mentionner", value=role_mentionner.mention, inline=False)
-        elif config_info.get("mention_role_id"):
-            role = interaction.guild.get_role(config_info["mention_role_id"])
-            if role:
-                embed.add_field(name="👥 Role a mentionner", value=f"{role.mention} (inchange)", inline=False)
-
-        embed.set_footer(text=f"Configure par {interaction.user}")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    except Exception as e:
-        print(f"Erreur dans /config: {e}")
-        await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
-
-@bot.tree.command(name="ban", description="Lancer un jugement de bannissement")
-@app_commands.describe(
-    user="Utilisateur a juger",
-    raison="Raison du bannissement",
-    preuve="Image ou video comme preuve"
-)
-async def ban(interaction: discord.Interaction, user: discord.Member, raison: str, preuve: discord.Attachment):
+@bot.tree.command(name="ban", description="Lancer un jugement")
+async def ban(i: discord.Interaction, user: discord.Member, raison: str, preuve: discord.Attachment):
     try:
-        if is_user_protected(interaction.guild_id, user.id):
-            return await interaction.response.send_message(
-                "❌ Vous ne pouvez pas lancer un jugement pour un membre protege.",
-                ephemeral=True
-            )
+        if is_user_protected(i.guild_id, user.id): return await i.response.send_message("❌ Membre protege.", ephemeral=True)
+        if not can_start_judgment(i.user): return await i.response.send_message("❌ Permission refusee.", ephemeral=True)
+        if preuve.content_type not in ['image/jpeg','image/jpg','image/png','image/gif','image/webp','video/mp4','video/quicktime','video/x-msvideo','video/x-ms-wmv','video/webm']:
+            return await i.response.send_message("❌ Image ou video requise.", ephemeral=True)
+        e = discord.Embed(title=f"⚖️ Jugement de {user}", color=discord.Color.dark_red(), timestamp=datetime.now())
+        e.set_thumbnail(url=user.display_avatar.url)
+        e.add_field(name="👮 Moderateurburu", value=i.user.mention, inline=False)
+        e.add_field(name="🦹 Accuse", value=user.mention, inline=False)
+        e.add_field(name="📋 Raison", value=raison, inline=False)
+        e.add_field(name="📁 Preuve", value=f"[Voir la preuve]({preuve.url})", inline=False)
+        e.add_field(name="⚖️ Etat", value="✅ OUI (0/3)\n❌ NON (0/3)", inline=False)
+        cfg = get_config(i.guild_id)
+        chan = i.guild.get_channel(cfg['ban_channel_id']) if cfg['ban_channel_id'] else i.channel
+        mention = f"<@&{cfg['mention_role_id']}>" if cfg.get('mention_role_id') and i.guild.get_role(cfg['mention_role_id']) else ""
+        await i.response.send_message(f"✅ Jugement lance dans {chan.mention}", ephemeral=True)
+        await chan.send(content=mention, embed=e, view=TribunalView(user, e, preuve.url, i.user))
+    except Exception as e: await i.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-        if not can_start_judgment(interaction.user):
-            return await interaction.response.send_message(
-                "❌ Tu n'as pas la permission d'utiliser cette commande.", 
-                ephemeral=True
-            )
-
-        valid_content_types = [
-            'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-            'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-ms-wmv',
-            'video/webm'
-        ]
-
-        if preuve.content_type not in valid_content_types:
-            return await interaction.response.send_message(
-                f"❌ Le fichier doit etre une image ou une video! Type recu: {preuve.content_type}", 
-                ephemeral=True
-            )
-
-        embed = discord.Embed(
-            title=f"⚖️ Jugement de {user}",
-            color=discord.Color.dark_red(),
-            timestamp=datetime.now()
-        )
-
-        embed.set_thumbnail(url=user.display_avatar.url)
-        embed.add_field(name="👮 Moderateur", value=interaction.user.mention, inline=False)
-        embed.add_field(name="🦹 Accuse", value=user.mention, inline=False)
-        embed.add_field(name="📋 Raison", value=raison, inline=False)
-        embed.add_field(name="📁 Preuve", value=f"[Cliquez ici pour voir la preuve]({preuve.url})", inline=False)
-        embed.add_field(name="⚖️ Etat du jugement", 
-                       value=f"✅ **OUI** (0/3)\nAucun vote\n\n❌ **NON** (0/3)\nAucun vote", 
-                       inline=False)
-        embed.set_footer(text="Tribunal du serveur • Utilisez les boutons pour voter")
-
-        config_info = get_config(interaction.guild_id)
-        ban_channel_id = config_info.get("ban_channel_id")
-
-        mention_text = ""
-        mention_role_id = config_info.get("mention_role_id")
-        if mention_role_id:
-            role = interaction.guild.get_role(mention_role_id)
-            if role:
-                mention_text = role.mention
-
-        if ban_channel_id:
-            channel = interaction.guild.get_channel(ban_channel_id)
-            if channel:
-                salon_nom = channel.mention
-            else:
-                salon_nom = "le salon courant"
-                await interaction.followup.send(
-                    "⚠️ Le salon configure n'existe plus. Le jugement a ete envoye ici.", 
-                    ephemeral=True
-                )
-        else:
-            salon_nom = "le salon courant"
-
-        await interaction.response.send_message(f"**Jugement** lance dans {salon_nom}.", ephemeral=True)
-
-        view = TribunalView(user, embed, preuve.url, interaction.user)
-
-        if ban_channel_id and (channel := interaction.guild.get_channel(ban_channel_id)):
-            message = await channel.send(content=mention_text, embed=embed, view=view)
-        else:
-            message = await interaction.channel.send(content=mention_text, embed=embed, view=view)
-
-    except Exception as e:
-        print(f"Erreur dans /ban: {e}")
-        await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
-
-@bot.tree.command(name="baninfo", description="Voir les informations d'un bannissement")
-@app_commands.describe(user="Utilisateur banni")
-async def baninfo(interaction: discord.Interaction, user: discord.User):
-    try:
-        embed = discord.Embed(
-            title=f"Bannissement de ({user.name})",
-            color=discord.Color.dark_red(),
-            timestamp=datetime.now()
-        )
-
-        embed.set_thumbnail(url=user.display_avatar.url)
-        embed.add_field(name="Banni par :", value="Information non disponible", inline=False)
-        embed.add_field(name="Raison :", value="Information non disponible", inline=False)
-
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-    except Exception as e:
-        print(f"Erreur dans /baninfo: {e}")
-        await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
-
-@bot.tree.command(name="autorise", description="Ajouter ou retirer l'autorisation d'un role (ADMIN)")
+@bot.tree.command(name="autorise", description="Gerer les roles (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(
-    role="Role a autoriser/desautoriser", 
-    type="Type de permission"
-)
-@app_commands.choices(type=[
-    app_commands.Choice(name="vote", value="vote"),
-    app_commands.Choice(name="ban", value="ban"),
-    app_commands.Choice(name="jugement", value="jugement")
-])
-async def autorise(interaction: discord.Interaction, role: discord.Role, type: app_commands.Choice[str]):
+@app_commands.choices(type=[app_commands.Choice(n, v) for n, v in [("vote","vote"), ("ban","ban"), ("jugement","jugement")]])
+async def autorise(i, role: discord.Role, type: app_commands.Choice[str]):
     try:
-        cursor.execute(
-            "SELECT 1 FROM guild_roles WHERE guild_id = ? AND role_id = ? AND role_type = ?",
-            (interaction.guild_id, role.id, type.value)
-        )
-
-        already_authorized = cursor.fetchone() is not None
-
-        if already_authorized:
-            cursor.execute(
-                "DELETE FROM guild_roles WHERE guild_id = ? AND role_id = ? AND role_type = ?",
-                (interaction.guild_id, role.id, type.value)
-            )
-            action = "desautorise"
-            color = discord.Color.orange()
+        cursor.execute("SELECT 1 FROM guild_roles WHERE guild_id=? AND role_id=? AND role_type=?", (i.guild_id, role.id, type.value))
+        exists = cursor.fetchone()
+        if exists:
+            cursor.execute("DELETE FROM guild_roles WHERE guild_id=? AND role_id=? AND role_type=?", (i.guild_id, role.id, type.value))
+            action, color = "desautorise", discord.Color.orange()
         else:
-            cursor.execute(
-                "INSERT INTO guild_roles (guild_id, role_id, role_type) VALUES (?, ?, ?)",
-                (interaction.guild_id, role.id, type.value)
-            )
-            action = "autorise"
-            color = discord.Color.green()
-
+            cursor.execute("INSERT INTO guild_roles VALUES (?, ?, ?)", (i.guild_id, role.id, type.value))
+            action, color = "autorise", discord.Color.green()
         db.commit()
+        await i.response.send_message(f"✅ {role.mention} {action} pour {type.value}.", ephemeral=True)
+    except Exception as e: await i.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
 
-        embed = discord.Embed(
-            title="⚙️ Autorisation modifiee",
-            description=f"{role.mention} a ete **{action}** pour **{type.value}**.",
-            color=color,
-            timestamp=datetime.now()
-        )
-
-        current_roles = get_roles(interaction.guild_id, type.value)
-        if current_roles:
-            roles_mentions = " ".join([f"<@&{role_id}>" for role_id in current_roles])
-            embed.add_field(
-                name=f"Roles actuellement autorises ({type.value})",
-                value=roles_mentions,
-                inline=False
-            )
-
-        embed.set_footer(text=f"Action par {interaction.user}")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    except Exception as e:
-        print(f"Erreur dans /autorise: {e}")
-        await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
-
-@bot.tree.command(name="protect", description="Proteger un utilisateur des jugements (ADMIN)")
+@bot.tree.command(name="protect", description="Proteger un utilisateur (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(
-    user="Utilisateur a proteger",
-    raison="Raison de la protection (optionnel)"
-)
-async def protect(interaction: discord.Interaction, user: discord.Member, raison: Optional[str] = ""):
-    try:
-        if is_user_protected(interaction.guild_id, user.id):
-            return await interaction.response.send_message(
-                f"❌ {user.mention} est deja protege.", 
-                ephemeral=True
-            )
+async def protect(i, user: discord.Member, raison: str = ""):
+    if is_user_protected(i.guild_id, user.id): return await i.response.send_message(f"❌ {user.mention} deja protege.", ephemeral=True)
+    if add_protected_user(i.guild_id, user.id, i.user.id, raison):
+        await i.response.send_message(f"✅ {user.mention} protege.", ephemeral=True)
+    else: await i.response.send_message("❌ Erreur.", ephemeral=True)
 
-        if add_protected_user(interaction.guild_id, user.id, interaction.user.id, raison):
-            embed = discord.Embed(
-                title="🛡️ Utilisateur protege",
-                description=f"{user.mention} est maintenant protege des jugements.",
-                color=discord.Color.green(),
-                timestamp=datetime.now()
-            )
-
-            if raison:
-                embed.add_field(name="Raison", value=raison, inline=False)
-
-            embed.add_field(name="Protege par", value=interaction.user.mention, inline=False)
-            embed.set_footer(text=f"ID: {user.id}")
-
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await interaction.response.send_message(
-                "❌ Erreur lors de l'ajout de la protection.", 
-                ephemeral=True
-            )
-
-    except Exception as e:
-        print(f"Erreur dans /protect: {e}")
-        await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
-
-@bot.tree.command(name="unprotect", description="Retirer la protection d'un utilisateur (ADMIN)")
+@bot.tree.command(name="unprotect", description="Retirer protection (ADMIN)")
 @app_commands.checks.has_permissions(administrator=True)
-@app_commands.describe(
-    user="Utilisateur a depreteger"
-)
-async def unprotect(interaction: discord.Interaction, user: discord.Member):
+async def unprotect(i, user: discord.Member):
+    if not is_user_protected(i.guild_id, user.id): return await i.response.send_message(f"❌ {user.mention} non protege.", ephemeral=True)
+    if remove_protected_user(i.guild_id, user.id):
+        await i.response.send_message(f"✅ Protection retiree.", ephemeral=True)
+    else: await i.response.send_message("❌ Erreur.", ephemeral=True)
+
+@bot.tree.command(name="protected", description="Liste des proteges")
+async def protected(i):
+    users = get_protected_users(i.guild_id)
+    if not users: return await i.response.send_message("Aucun protege.", ephemeral=True)
+    e = discord.Embed(title="🛡️ Utilisateurs proteges", color=discord.Color.blue())
+    for uid, pid, r, t in users[:10]:
+        u = i.guild.get_member(uid)
+        e.add_field(name=u.mention if u else f"`{uid}`", value=f"Par: <@{pid}>\nRaison: {r or 'Aucune'}", inline=False)
+    await i.response.send_message(embed=e, ephemeral=True)
+
+@bot.tree.command(name="info", description="Configuration actuelle")
+async def info(i):
+    cfg = get_config(i.guild_id)
+    e = discord.Embed(title="⚙️ Configuration", color=discord.Color.blue())
+    e.add_field(name="📁 Salon jugement", value=f"<#{cfg['ban_channel_id']}>" if cfg['ban_channel_id'] else "Non defini", inline=False)
+    e.add_field(name="📋 Salon logs", value=f"<#{cfg['log_channel_id']}>" if cfg['log_channel_id'] else "Non defini", inline=False)
+    e.add_field(name="👥 Role mention", value=f"<@&{cfg['mention_role_id']}>" if cfg['mention_role_id'] else "Non defini", inline=False)
+    e.add_field(name="🛡️ Proteges", value=f"{len(get_protected_users(i.guild_id))} utilisateur(s)", inline=False)
+    await i.response.send_message(embed=e, ephemeral=True)
+
+# ========== COMMANDES SLASH DB (PROPRIETAIRE SEULEMENT) ==========
+@bot.tree.command(name="savedb", description="[PROPRIETAIRE] Sauvegarder la base de donnees")
+async def savedb_slash(i: discord.Interaction):
+    if i.user.id != i.guild.owner_id:
+        return await i.response.send_message(embed=discord.Embed(title="❌ Acces refuse", description="Seul le proprietaire du serveur peut utiliser cette commande.", color=0xFF0000), ephemeral=True)
     try:
-        if not is_user_protected(interaction.guild_id, user.id):
-            return await interaction.response.send_message(
-                f"❌ {user.mention} n'est pas protege.", 
-                ephemeral=True
-            )
+        await i.user.send(file=discord.File('data.db'))
+        await i.response.send_message(embed=discord.Embed(title="✅ Sauvegarde reussie", description="Fichier `data.db` envoye en DM.", color=0x00FF00), ephemeral=True)
+    except:
+        await i.response.send_message(embed=discord.Embed(title="❌ Erreur", description="Impossible d'envoyer en DM.", color=0xFF0000), ephemeral=True)
 
-        if remove_protected_user(interaction.guild_id, user.id):
-            embed = discord.Embed(
-                title="🛡️ Protection retiree",
-                description=f"{user.mention} n'est plus protege des jugements.",
-                color=discord.Color.orange(),
-                timestamp=datetime.now()
-            )
-
-            embed.add_field(name="Retire par", value=interaction.user.mention, inline=False)
-            embed.set_footer(text=f"ID: {user.id}")
-
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await interaction.response.send_message(
-                "❌ Erreur lors du retrait de la protection.", 
-                ephemeral=True
-            )
-
-    except Exception as e:
-        print(f"Erreur dans /unprotect: {e}")
-        await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
-
-@bot.tree.command(name="protected", description="Voir la liste des utilisateurs proteges")
-async def protected(interaction: discord.Interaction):
+@bot.tree.command(name="setdb", description="[PROPRIETAIRE] Restaurer la base de donnees")
+async def setdb_slash(i: discord.Interaction, fichier: discord.Attachment):
+    if i.user.id != i.guild.owner_id:
+        return await i.response.send_message(embed=discord.Embed(title="❌ Acces refuse", description="Seul le proprietaire du serveur peut utiliser cette commande.", color=0xFF0000), ephemeral=True)
+    if not fichier.filename.endswith('.db'):
+        return await i.response.send_message(embed=discord.Embed(title="❌ Fichier invalide", description="Le fichier doit etre au format .db", color=0xFF0000), ephemeral=True)
     try:
-        protected_users = get_protected_users(interaction.guild_id)
+        await fichier.save('data.db')
+        global db, cursor
+        db, cursor = init_db()
+        await i.response.send_message(embed=discord.Embed(title="✅ Restauration reussie", description="Base de donnees remplacee avec succes.", color=0x00FF00), ephemeral=True)
+    except:
+        await i.response.send_message(embed=discord.Embed(title="❌ Erreur", description="Impossible de restaurer la base de donnees.", color=0xFF0000), ephemeral=True)
 
-        if not protected_users:
-            return await interaction.response.send_message(
-                "Aucun utilisateur n'est actuellement protege.", 
-                ephemeral=True
-            )
-
-        embed = discord.Embed(
-            title="🛡️ Utilisateurs proteges",
-            description=f"{len(protected_users)} utilisateur(s) protege(s)",
-            color=discord.Color.blue(),
-            timestamp=datetime.now()
-        )
-
-        for user_id, protected_by, reason, protected_at in protected_users[:10]:
-            user = interaction.guild.get_member(user_id)
-            protector = interaction.guild.get_member(protected_by)
-
-            user_display = user.mention if user else f"`{user_id}` (non present)"
-            protector_display = protector.mention if protector else f"`{protected_by}`"
-            reason_display = reason if reason else "Aucune raison fournie"
-
-            embed.add_field(
-                name=user_display,
-                value=f"**Protege par:** {protector_display}\n**Raison:** {reason_display}\n**Depuis:** <t:{int(datetime.fromisoformat(protected_at).timestamp())}:R>",
-                inline=False
-            )
-
-        if len(protected_users) > 10:
-            embed.set_footer(text=f"Et {len(protected_users) - 10} autre(s) utilisateur(s)")
-
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    except Exception as e:
-        print(f"Erreur dans /protected: {e}")
-        await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
-
-@bot.tree.command(name="info", description="Voir la configuration actuelle")
-async def info(interaction: discord.Interaction):
-    try:
-        embed = discord.Embed(
-            title="⚙️ Configuration du bot",
-            color=discord.Color.blue(),
-            timestamp=datetime.now()
-        )
-
-        vote_roles = get_roles(interaction.guild_id, "vote")
-        ban_roles = get_roles(interaction.guild_id, "ban")
-        jugement_roles = get_roles(interaction.guild_id, "jugement")
-        config_info = get_config(interaction.guild_id)
-        protected_count = len(get_protected_users(interaction.guild_id))
-
-        vote_roles_mentions = " ".join([f"<@&{role_id}>" for role_id in vote_roles]) if vote_roles else "Aucun"
-        ban_roles_mentions = " ".join([f"<@&{role_id}>" for role_id in ban_roles]) if ban_roles else "Aucun"
-        jugement_roles_mentions = " ".join([f"<@&{role_id}>" for role_id in jugement_roles]) if jugement_roles else "Aucun"
-
-        ban_channel_info = "Salon courant"
-        if config_info.get("ban_channel_id"):
-            channel = interaction.guild.get_channel(config_info["ban_channel_id"])
-            ban_channel_info = channel.mention if channel else "❌ Salon introuvable"
-
-        log_channel_info = "Non configure"
-        if config_info.get("log_channel_id"):
-            channel = interaction.guild.get_channel(config_info["log_channel_id"])
-            log_channel_info = channel.mention if channel else "❌ Salon introuvable"
-
-        mention_role_info = "Non configure"
-        if config_info.get("mention_role_id"):
-            role = interaction.guild.get_role(config_info["mention_role_id"])
-            mention_role_info = role.mention if role else "❌ Role introuvable"
-
-        embed.add_field(name="👥 Roles pouvant voter", value=vote_roles_mentions, inline=False)
-        embed.add_field(name="⚖️ Roles pouvant bannir", value=ban_roles_mentions, inline=False)
-        embed.add_field(name="🎯 Roles pouvant lancer un jugement", value=jugement_roles_mentions, inline=False)
-        embed.add_field(name="📁 Salon de jugement", value=ban_channel_info, inline=False)
-        embed.add_field(name="📋 Salon des logs", value=log_channel_info, inline=False)
-        embed.add_field(name="👥 Role a mentionner", value=mention_role_info, inline=False)
-        embed.add_field(name="🛡️ Utilisateurs proteges", value=f"{protected_count} utilisateur(s)", inline=False)
-
-        embed.add_field(name="📜 Commandes disponibles", value="""
-`/ban` - Lancer un jugement
-`/baninfo` - Voir infos bannissement
-`/autorise` - Autoriser/desautoriser un role (admin)
-`/config` - Configurer les salons (admin)
-`/protect` - Proteger un utilisateur (admin)
-`/unprotect` - Retirer la protection (admin)
-`/protected` - Voir les proteges
-`/info` - Voir cette configuration
-""", inline=False)
-
-        embed.set_footer(text=f"Demande par {interaction.user}")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    except Exception as e:
-        print(f"Erreur dans /info: {e}")
-        await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
-
-# ---------- PREFIX COMMANDS ----------
+# ========== PREFIX COMMANDS (GARDEES POUR COMPATIBILITE) ==========
 @bot.command(name=">savedb")
 @commands.check(lambda ctx: ctx.author.id == ADMIN_USER_ID)
-async def savedb(ctx):
-    """Sauvegarde la base de donnees et l'envoie en DM"""
+async def savedb_prefix(ctx):
     try:
         await ctx.author.send(file=discord.File('data.db'))
-        embed = discord.Embed(
-            title="✅ Base de donnees sauvegardee",
-            description="Le fichier `data.db` a ete envoye dans tes DM.",
-            color=0x00FF00
-        )
-        await ctx.send(embed=embed)
-    except Exception as e:
-        print(f"Erreur savedb: {e}")
-        embed = discord.Embed(
-            title="❌ Erreur",
-            description="Impossible d'envoyer la base de donnees. Verifie que tes DM sont ouverts.",
-            color=0xFF0000
-        )
-        await ctx.send(embed=embed)
+        await ctx.send(embed=discord.Embed(title="✅ Sauvegarde", description="Fichier envoye en DM.", color=0x00FF00))
+    except:
+        await ctx.send(embed=discord.Embed(title="❌ Erreur", description="DM fermes.", color=0xFF0000))
 
 @bot.command(name=">setdb")
 @commands.check(lambda ctx: ctx.author.id == ADMIN_USER_ID)
-async def setdb(ctx):
-    """Restaure la base de donnees depuis un fichier attache"""
+async def setdb_prefix(ctx):
     if not ctx.message.attachments:
-        embed = discord.Embed(
-            title="❌ Aucun fichier",
-            description="Veuillez attacher un fichier `data.db` a votre message.",
-            color=0xFF0000
-        )
-        return await ctx.send(embed=embed)
-    
+        return await ctx.send(embed=discord.Embed(title="❌ Fichier manquant", description="Attache un fichier .db", color=0xFF0000))
     try:
         await ctx.message.attachments[0].save('data.db')
-        
-        global db, cursor
-        db, cursor = init_db()
-        
-        embed = discord.Embed(
-            title="✅ Base de donnees restauree",
-            description="Le fichier `data.db` a ete remplace avec succes.",
-            color=0x00FF00
-        )
-        await ctx.send(embed=embed)
-        
-    except Exception as e:
-        print(f"Erreur setdb: {e}")
-        embed = discord.Embed(
-            title="❌ Erreur",
-            description="Impossible de restaurer la base de donnees.",
-            color=0xFF0000
-        )
-        await ctx.send(embed=embed)
+        global db2, cursor2
+        db2, cursor2 = init_db()
+        await ctx.send(embed=discord.Embed(title="✅ Restauration", description="Base de donnees remplacee.", color=0x00FF00))
+    except:
+        await ctx.send(embed=discord.Embed(title="❌ Erreur", description="Restauration echouee.", color=0xFF0000))
 
-# ---------- ERROR HANDLING ----------
 @bot.tree.error
-async def on_app_command_error(interaction: discord.Interaction, error):
+async def on_error(i, error):
     try:
         if isinstance(error, app_commands.errors.MissingPermissions):
-            await interaction.response.send_message("❌ Tu n'as pas les permissions necessaires.", ephemeral=True)
-        elif isinstance(error, app_commands.errors.CommandNotFound):
-            await interaction.response.send_message("❌ Commande introuvable.", ephemeral=True)
+            await i.response.send_message("❌ Permissions administrateur requises.", ephemeral=True)
         else:
-            print(f"Erreur globale: {error}")
-            await interaction.response.send_message("❌ Une erreur est survenue.", ephemeral=True)
-    except:
-        pass
+            print(f"Erreur: {error}")
+            await i.response.send_message("❌ Une erreur est survenue.", ephemeral=True)
+    except: pass
 
-# ---------- START BOT ----------
 print("🤖 Demarrage du bot Discord...")
-try:
-    if TOKEN:
-        bot.run(TOKEN)
-    else:
-        print("⚠️ Token Discord manquant, maintien du health check actif...")
-        while True:
-            time.sleep(60)
-except Exception as e:
-    print(f"❌ Erreur de demarrage du bot: {e}")
-    print("⚠️ Le health check reste actif")
-    try:
-        while True:
-            time.sleep(60)
-    except KeyboardInterrupt:
-        print("🔴 Arret du script")
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    while True: time.sleep(60)
