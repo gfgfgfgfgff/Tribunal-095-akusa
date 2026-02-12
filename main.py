@@ -8,7 +8,16 @@ from datetime import datetime
 from typing import Optional
 import signal
 
-# ========== HEALTH CHECK SERVER AMELIORE ==========
+# ========== HACK POUR PYTHON 3.13 ==========
+if sys.version_info >= (3, 13):
+    import types
+    import importlib.util
+    spec = importlib.util.spec_from_loader('audioop', loader=None)
+    audioop = types.ModuleType('audioop')
+    sys.modules['audioop'] = audioop
+# ===========================================
+
+# ========== HEALTH CHECK SERVER ==========
 class HealthHandler(BaseHTTPRequestHandler):
     """Handler pour les health checks HTTP"""
     def do_GET(self):
