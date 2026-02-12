@@ -23,45 +23,35 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b'{"status": "ok", "service": "discord-bot"}')
         else:
-            self.send_response(200)  # ✅ TOUJOURS 200 même pour les autres chemins
+            self.send_response(200)
             self.send_header('Content-type', 'text/plain')
             self.end_headers()
             self.wfile.write(b'Bot Discord Tribunal')
     
     def log_message(self, format, *args):
-        """Désactive les logs HTTP pour éviter le spam"""
         pass
 
 def start_health_server():
-    """Démarre le serveur HTTP pour les health checks"""
     try:
-        # Render fournit le PORT dans les variables d'environnement
         port = int(os.environ.get('PORT', 10000))
         server = HTTPServer(('0.0.0.0', port), HealthHandler)
-        
         print(f"✅ Serveur health check démarré sur le port {port}")
         print(f"✅ URL: http://0.0.0.0:{port}/")
         sys.stdout.flush()
         
-        # Gérer le shutdown proprement
         def shutdown(signum, frame):
             print("🔴 Arrêt du serveur health check...")
             server.shutdown()
         
         signal.signal(signal.SIGTERM, shutdown)
-        
         server.serve_forever()
     except Exception as e:
         print(f"❌ Erreur serveur health check: {e}")
         sys.stdout.flush()
-        # Ne pas quitter, le bot Discord peut fonctionner sans
 
-# Démarrer le serveur health check IMMÉDIATEMENT
 print("🚀 Démarrage du health check...")
 health_thread = threading.Thread(target=start_health_server, daemon=True)
 health_thread.start()
-
-# Attendre que le serveur soit prêt
 time.sleep(2)
 print("✅ Health check prêt")
 # ========== FIN HEALTH CHECK ==========
@@ -71,23 +61,19 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
-# Configuration
 TOKEN = os.getenv("DISCORD_TOKEN")
 if not TOKEN:
     print("❌ ERREUR: DISCORD_TOKEN non défini!")
     print("Configure la variable d'environnement DISCORD_TOKEN sur Render")
-    # Continuer quand même pour que le health check fonctionne
     print("⚠️ Le bot Discord ne démarrera pas, mais le health check est actif")
 
 print("🔧 Initialisation du bot Discord...")
 
 # ---------- DATABASE FUNCTIONS ----------
 def init_db():
-    """Initialise la base de données"""
     db = sqlite3.connect("data.db", check_same_thread=False)
     cursor = db.cursor()
 
-    # Table pour les rôles
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS guild_roles (
             guild_id INTEGER,
@@ -97,7 +83,6 @@ def init_db():
         )
     """)
 
-    # Table de configuration
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS config (
             guild_id INTEGER PRIMARY KEY,
@@ -107,7 +92,6 @@ def init_db():
         )
     """)
 
-    # Table pour les utilisateurs protégés
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS protected_users (
             guild_id INTEGER,
@@ -126,7 +110,6 @@ db, cursor = init_db()
 print("✅ Base de données initialisée")
 
 def get_roles(guild_id: int, role_type: str):
-    """Récupère les rôles autorisés pour un type donné"""
     try:
         cursor.execute(
             "SELECT role_id FROM guild_roles WHERE guild_id = ? AND role_type = ?",
@@ -138,31 +121,21 @@ def get_roles(guild_id: int, role_type: str):
         return []
 
 def has_permission(member: discord.Member, role_type: str) -> bool:
-    """Vérifie si un membre a la permission via ses rôles"""
-    # Les administrateurs ont toujours les permissions
     if member.guild_permissions.administrator:
         return True
-
     allowed_roles = get_roles(member.guild.id, role_type)
     return any(role.id in allowed_roles for role in member.roles)
 
 def can_start_judgment(member: discord.Member) -> bool:
-    """Vérifie si un membre peut lancer un jugement"""
     if member.guild_permissions.administrator:
         return True
-
-    # Vérifier le rôle "jugement"
     if has_permission(member, "jugement"):
         return True
-
-    # Vérifier le rôle "ban" pour rétrocompatibilité
     if has_permission(member, "ban"):
         return True
-
     return False
 
 def is_user_protected(guild_id: int, user_id: int) -> bool:
-    """Vérifie si un utilisateur est protégé"""
     try:
         cursor.execute(
             "SELECT 1 FROM protected_users WHERE guild_id = ? AND user_id = ?",
@@ -174,7 +147,6 @@ def is_user_protected(guild_id: int, user_id: int) -> bool:
         return False
 
 def add_protected_user(guild_id: int, user_id: int, protected_by: int, reason: str = ""):
-    """Ajoute un utilisateur protégé"""
     try:
         cursor.execute(
             "INSERT OR REPLACE INTO protected_users (guild_id, user_id, protected_by, reason) VALUES (?, ?, ?, ?)",
@@ -187,7 +159,6 @@ def add_protected_user(guild_id: int, user_id: int, protected_by: int, reason: s
         return False
 
 def remove_protected_user(guild_id: int, user_id: int):
-    """Retire un utilisateur protégé"""
     try:
         cursor.execute(
             "DELETE FROM protected_users WHERE guild_id = ? AND user_id = ?",
@@ -200,7 +171,6 @@ def remove_protected_user(guild_id: int, user_id: int):
         return False
 
 def get_protected_users(guild_id: int):
-    """Récupère la liste des utilisateurs protégés"""
     try:
         cursor.execute(
             "SELECT user_id, protected_by, reason, protected_at FROM protected_users WHERE guild_id = ?",
@@ -212,7 +182,6 @@ def get_protected_users(guild_id: int):
         return []
 
 def get_config(guild_id: int) -> dict:
-    """Récupère la configuration du serveur"""
     try:
         cursor.execute(
             "SELECT ban_channel_id, log_channel_id, mention_role_id FROM config WHERE guild_id = ?",
@@ -236,10 +205,8 @@ def get_config(guild_id: int) -> dict:
     }
 
 def set_config(guild_id: int, **kwargs):
-    """Met à jour la configuration du serveur"""
     try:
         current = get_config(guild_id)
-
         updates = {}
         for key in ['ban_channel_id', 'log_channel_id', 'mention_role_id']:
             updates[key] = kwargs.get(key, current.get(key))
@@ -278,7 +245,6 @@ class TribunalView(discord.ui.View):
         self.has_concluded = False
 
     async def update_embed(self, message):
-        """Met à jour l'embed avec les votes actuels"""
         mentions_oui = " ".join([f"<@{user_id}>" for user_id in self.votes_yes]) if self.votes_yes else "Aucun"
         mentions_non = " ".join([f"<@{user_id}>" for user_id in self.votes_no]) if self.votes_no else "Aucun"
 
@@ -303,7 +269,6 @@ class TribunalView(discord.ui.View):
         await message.edit(embed=embed)
 
     async def send_log(self, verdict: str, accepted: bool, moderator: discord.Member = None):
-        """Envoie un log du verdict"""
         config = get_config(self.target.guild.id)
         log_channel_id = config.get("log_channel_id")
 
@@ -333,7 +298,6 @@ class TribunalView(discord.ui.View):
                 await channel.send(embed=embed)
 
     async def check_verdict(self, interaction: discord.Interaction):
-        """Vérifie si un verdict a été atteint"""
         if len(self.votes_yes) >= 3:
             try:
                 await self.target.ban(reason="Vote du tribunal (3 oui)")
@@ -366,7 +330,6 @@ class TribunalView(discord.ui.View):
             await self.update_embed(interaction.message)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Vérifie si l'interaction est autorisée"""
         if self.has_concluded:
             await interaction.response.send_message(
                 "❌ Ce jugement est déjà terminé.",
@@ -377,7 +340,6 @@ class TribunalView(discord.ui.View):
 
     @discord.ui.button(label="Oui", emoji="✅", style=discord.ButtonStyle.success)
     async def oui(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Bouton Oui pour voter"""
         if not has_permission(interaction.user, "vote"):
             return await interaction.response.send_message("Tu n'es pas autorisé à voter.", ephemeral=True)
 
@@ -391,7 +353,6 @@ class TribunalView(discord.ui.View):
 
     @discord.ui.button(label="Non", emoji="❌", style=discord.ButtonStyle.danger)
     async def non(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Bouton Non pour voter"""
         if not has_permission(interaction.user, "vote"):
             return await interaction.response.send_message("Tu n'es pas autorisé à voter.", ephemeral=True)
 
@@ -405,7 +366,6 @@ class TribunalView(discord.ui.View):
 
     @discord.ui.button(label="Bannir", emoji="👨‍⚖️", style=discord.ButtonStyle.secondary)
     async def bannir(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Bouton pour bannir directement"""
         if not has_permission(interaction.user, "ban"):
             return await interaction.response.send_message(
                 "Tu n'as pas les permissions nécessaires pour appuyer sur ce bouton",
@@ -446,7 +406,6 @@ class TribunalView(discord.ui.View):
 # ---------- BOT EVENTS ----------
 @bot.event
 async def on_ready():
-    """Événement quand le bot est prêt"""
     try:
         synced = await bot.tree.sync()
         print(f"✅ Connecté en tant que : {bot.user}")
@@ -455,7 +414,6 @@ async def on_ready():
         print(f"✅ Health check actif sur le port {os.environ.get('PORT', 10000)}")
         print("🚀 Bot prêt à fonctionner!")
         
-        # Afficher l'URL du health check
         port = os.environ.get('PORT', 10000)
         print(f"🌐 Health check URL: https://tribunal-095-akusa.onrender.com/")
     except Exception as e:
@@ -530,21 +488,18 @@ async def config(interaction: discord.Interaction,
 )
 async def ban(interaction: discord.Interaction, user: discord.Member, raison: str, preuve: discord.Attachment):
     try:
-        # Vérifier si l'utilisateur est protégé
         if is_user_protected(interaction.guild_id, user.id):
             return await interaction.response.send_message(
                 "❌ Vous ne pouvez pas lancer un jugement pour un membre protégé.",
                 ephemeral=True
             )
 
-        # Vérifier les permissions
         if not can_start_judgment(interaction.user):
             return await interaction.response.send_message(
                 "❌ Tu n'as pas la permission d'utiliser cette commande.", 
                 ephemeral=True
             )
 
-        # Vérifier le type de fichier
         valid_content_types = [
             'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
             'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-ms-wmv',
@@ -557,7 +512,6 @@ async def ban(interaction: discord.Interaction, user: discord.Member, raison: st
                 ephemeral=True
             )
 
-        # Créer l'embed du jugement
         embed = discord.Embed(
             title=f"⚖️ Jugement de {user}",
             color=discord.Color.dark_red(),
@@ -574,11 +528,9 @@ async def ban(interaction: discord.Interaction, user: discord.Member, raison: st
                        inline=False)
         embed.set_footer(text="Tribunal du serveur • Utilisez les boutons pour voter")
 
-        # Récupérer la configuration
         config_info = get_config(interaction.guild_id)
         ban_channel_id = config_info.get("ban_channel_id")
 
-        # Préparer la mention du rôle
         mention_text = ""
         mention_role_id = config_info.get("mention_role_id")
         if mention_role_id:
@@ -586,7 +538,6 @@ async def ban(interaction: discord.Interaction, user: discord.Member, raison: st
             if role:
                 mention_text = role.mention
 
-        # Déterminer où envoyer le jugement
         if ban_channel_id:
             channel = interaction.guild.get_channel(ban_channel_id)
             if channel:
@@ -600,10 +551,8 @@ async def ban(interaction: discord.Interaction, user: discord.Member, raison: st
         else:
             salon_nom = "le salon courant"
 
-        # Envoyer la confirmation
         await interaction.response.send_message(f"**Jugement** lancé dans {salon_nom}.", ephemeral=True)
 
-        # Envoyer le jugement dans le bon salon
         view = TribunalView(user, embed, preuve.url, interaction.user)
 
         if ban_channel_id and (channel := interaction.guild.get_channel(ban_channel_id)):
@@ -647,7 +596,6 @@ async def baninfo(interaction: discord.Interaction, user: discord.User):
 ])
 async def autorise(interaction: discord.Interaction, role: discord.Role, type: app_commands.Choice[str]):
     try:
-        # Vérifier si le rôle est déjà autorisé
         cursor.execute(
             "SELECT 1 FROM guild_roles WHERE guild_id = ? AND role_id = ? AND role_type = ?",
             (interaction.guild_id, role.id, type.value)
@@ -656,7 +604,6 @@ async def autorise(interaction: discord.Interaction, role: discord.Role, type: a
         already_authorized = cursor.fetchone() is not None
 
         if already_authorized:
-            # Retirer l'autorisation
             cursor.execute(
                 "DELETE FROM guild_roles WHERE guild_id = ? AND role_id = ? AND role_type = ?",
                 (interaction.guild_id, role.id, type.value)
@@ -664,7 +611,6 @@ async def autorise(interaction: discord.Interaction, role: discord.Role, type: a
             action = "désautorisé"
             color = discord.Color.orange()
         else:
-            # Ajouter l'autorisation
             cursor.execute(
                 "INSERT INTO guild_roles (guild_id, role_id, role_type) VALUES (?, ?, ?)",
                 (interaction.guild_id, role.id, type.value)
@@ -674,7 +620,6 @@ async def autorise(interaction: discord.Interaction, role: discord.Role, type: a
 
         db.commit()
 
-        # Créer un embed pour la réponse
         embed = discord.Embed(
             title="⚙️ Autorisation modifiée",
             description=f"{role.mention} a été **{action}** pour **{type.value}**.",
@@ -682,7 +627,6 @@ async def autorise(interaction: discord.Interaction, role: discord.Role, type: a
             timestamp=datetime.now()
         )
 
-        # Afficher l'état actuel des autorisations pour ce type
         current_roles = get_roles(interaction.guild_id, type.value)
         if current_roles:
             roles_mentions = " ".join([f"<@&{role_id}>" for role_id in current_roles])
@@ -707,14 +651,12 @@ async def autorise(interaction: discord.Interaction, role: discord.Role, type: a
 )
 async def protect(interaction: discord.Interaction, user: discord.Member, raison: Optional[str] = ""):
     try:
-        # Vérifier si l'utilisateur est déjà protégé
         if is_user_protected(interaction.guild_id, user.id):
             return await interaction.response.send_message(
                 f"❌ {user.mention} est déjà protégé.", 
                 ephemeral=True
             )
 
-        # Ajouter la protection
         if add_protected_user(interaction.guild_id, user.id, interaction.user.id, raison):
             embed = discord.Embed(
                 title="🛡️ Utilisateur protégé",
@@ -747,14 +689,12 @@ async def protect(interaction: discord.Interaction, user: discord.Member, raison
 )
 async def unprotect(interaction: discord.Interaction, user: discord.Member):
     try:
-        # Vérifier si l'utilisateur est protégé
         if not is_user_protected(interaction.guild_id, user.id):
             return await interaction.response.send_message(
                 f"❌ {user.mention} n'est pas protégé.", 
                 ephemeral=True
             )
 
-        # Retirer la protection
         if remove_protected_user(interaction.guild_id, user.id):
             embed = discord.Embed(
                 title="🛡️ Protection retirée",
@@ -827,19 +767,16 @@ async def info(interaction: discord.Interaction):
             timestamp=datetime.now()
         )
 
-        # Récupérer les données
         vote_roles = get_roles(interaction.guild_id, "vote")
         ban_roles = get_roles(interaction.guild_id, "ban")
         jugement_roles = get_roles(interaction.guild_id, "jugement")
         config_info = get_config(interaction.guild_id)
         protected_count = len(get_protected_users(interaction.guild_id))
 
-        # Formater les rôles
         vote_roles_mentions = " ".join([f"<@&{role_id}>" for role_id in vote_roles]) if vote_roles else "Aucun"
         ban_roles_mentions = " ".join([f"<@&{role_id}>" for role_id in ban_roles]) if ban_roles else "Aucun"
         jugement_roles_mentions = " ".join([f"<@&{role_id}>" for role_id in jugement_roles]) if jugement_roles else "Aucun"
 
-        # Informations sur les salons
         ban_channel_info = "Salon courant"
         if config_info.get("ban_channel_id"):
             channel = interaction.guild.get_channel(config_info["ban_channel_id"])
@@ -855,7 +792,6 @@ async def info(interaction: discord.Interaction):
             role = interaction.guild.get_role(config_info["mention_role_id"])
             mention_role_info = role.mention if role else "❌ Rôle introuvable"
 
-        # Ajouter les champs à l'embed
         embed.add_field(name="👥 Rôles pouvant voter", value=vote_roles_mentions, inline=False)
         embed.add_field(name="⚖️ Rôles pouvant bannir", value=ban_roles_mentions, inline=False)
         embed.add_field(name="🎯 Rôles pouvant lancer un jugement", value=jugement_roles_mentions, inline=False)
@@ -864,7 +800,6 @@ async def info(interaction: discord.Interaction):
         embed.add_field(name="👥 Rôle à mentionner", value=mention_role_info, inline=False)
         embed.add_field(name="🛡️ Utilisateurs protégés", value=f"{protected_count} utilisateur(s)", inline=False)
 
-        # Commandes disponibles
         embed.add_field(name="📜 Commandes disponibles", value="""
 `/ban` - Lancer un jugement
 `/baninfo` - Voir infos bannissement
@@ -882,6 +817,36 @@ async def info(interaction: discord.Interaction):
     except Exception as e:
         print(f"Erreur dans /info: {e}")
         await interaction.response.send_message(f"❌ Erreur: {str(e)[:100]}", ephemeral=True)
+
+# ---------- PREFIX COMMANDS ----------
+@bot.command(name=">savedb")
+@commands.check(lambda ctx: ctx.author.id == ADMIN_USER_ID)
+async def savedb(ctx):
+    """Sauvegarde la base de données et l'envoie en DM"""
+    try:
+        await ctx.author.send(file=discord.File('data.db'))
+        await ctx.send(embed=discord.Embed(description="📩 Base de données envoyée en DM", color=0xFFFFFF))
+    except Exception as e:
+        print(f"Erreur savedb: {e}")
+        await ctx.send(embed=discord.Embed(description="❌ Erreur lors de l'envoi de la base de données", color=0xFFFFFF))
+
+@bot.command(name=">setdb")
+@commands.check(lambda ctx: ctx.author.id == ADMIN_USER_ID)
+async def setdb(ctx):
+    """Restaure la base de données depuis un fichier attaché"""
+    if not ctx.message.attachments:
+        return await ctx.send(embed=discord.Embed(description="❌ Veuillez attacher un fichier .db", color=0xFFFFFF))
+    
+    try:
+        await ctx.message.attachments[0].save('data.db')
+        
+        global db, cursor
+        db, cursor = init_db()
+        
+        await ctx.send(embed=discord.Embed(description="✅ Base de données restaurée avec succès", color=0xFFFFFF))
+    except Exception as e:
+        print(f"Erreur setdb: {e}")
+        await ctx.send(embed=discord.Embed(description="❌ Erreur lors de la restauration", color=0xFFFFFF))
 
 # ---------- ERROR HANDLING ----------
 @bot.tree.error
@@ -904,13 +869,11 @@ try:
         bot.run(TOKEN)
     else:
         print("⚠️ Token Discord manquant, maintien du health check actif...")
-        # Garder le script en vie pour le health check
         while True:
             time.sleep(60)
 except Exception as e:
     print(f"❌ Erreur de démarrage du bot: {e}")
     print("⚠️ Le health check reste actif")
-    # Continuer à exécuter le script pour le health check
     try:
         while True:
             time.sleep(60)
