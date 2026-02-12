@@ -67,6 +67,9 @@ if not TOKEN:
     print("Configure la variable d'environnement DISCORD_TOKEN sur Render")
     print("⚠️ Le bot Discord ne démarrera pas, mais le health check est actif")
 
+# ========== ADMIN ID ==========
+ADMIN_USER_ID = 1399234120214909010  # ← REMPLACE PAR TON ID DISCORD
+
 print("🔧 Initialisation du bot Discord...")
 
 # ---------- DATABASE FUNCTIONS ----------
@@ -825,17 +828,32 @@ async def savedb(ctx):
     """Sauvegarde la base de données et l'envoie en DM"""
     try:
         await ctx.author.send(file=discord.File('data.db'))
-        await ctx.send(embed=discord.Embed(description="📩 Base de données envoyée en DM", color=0xFFFFFF))
+        embed = discord.Embed(
+            title="✅ Base de données sauvegardée",
+            description="Le fichier `data.db` a été envoyé dans tes DM.",
+            color=0x00FF00
+        )
+        await ctx.send(embed=embed)
     except Exception as e:
         print(f"Erreur savedb: {e}")
-        await ctx.send(embed=discord.Embed(description="❌ Erreur lors de l'envoi de la base de données", color=0xFFFFFF))
+        embed = discord.Embed(
+            title="❌ Erreur",
+            description="Impossible d'envoyer la base de données. Vérifie que tes DM sont ouverts.",
+            color=0xFF0000
+        )
+        await ctx.send(embed=embed)
 
 @bot.command(name=">setdb")
 @commands.check(lambda ctx: ctx.author.id == ADMIN_USER_ID)
 async def setdb(ctx):
     """Restaure la base de données depuis un fichier attaché"""
     if not ctx.message.attachments:
-        return await ctx.send(embed=discord.Embed(description="❌ Veuillez attacher un fichier .db", color=0xFFFFFF))
+        embed = discord.Embed(
+            title="❌ Aucun fichier",
+            description="Veuillez attacher un fichier `data.db` à votre message.",
+            color=0xFF0000
+        )
+        return await ctx.send(embed=embed)
     
     try:
         await ctx.message.attachments[0].save('data.db')
@@ -843,10 +861,21 @@ async def setdb(ctx):
         global db, cursor
         db, cursor = init_db()
         
-        await ctx.send(embed=discord.Embed(description="✅ Base de données restaurée avec succès", color=0xFFFFFF))
+        embed = discord.Embed(
+            title="✅ Base de données restaurée",
+            description="Le fichier `data.db` a été remplacé avec succès.",
+            color=0x00FF00
+        )
+        await ctx.send(embed=embed)
+        
     except Exception as e:
         print(f"Erreur setdb: {e}")
-        await ctx.send(embed=discord.Embed(description="❌ Erreur lors de la restauration", color=0xFFFFFF))
+        embed = discord.Embed(
+            title="❌ Erreur",
+            description="Impossible de restaurer la base de données.",
+            color=0xFF0000
+        )
+        await ctx.send(embed=embed)
 
 # ---------- ERROR HANDLING ----------
 @bot.tree.error
