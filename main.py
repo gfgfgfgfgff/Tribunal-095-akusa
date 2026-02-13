@@ -4,7 +4,8 @@ if sys.version_info >= (3, 13):
     sys.modules['audioop'] = types.ModuleType('audioop')
 
 # ================= IMPORTS =================
-import os, sqlite3
+import os
+import sqlite3
 from datetime import datetime
 from typing import Optional
 import discord
@@ -60,6 +61,7 @@ def get_protected(gid):
 # ================= BOT =================
 intents = discord.Intents.default()
 intents.members = True
+intents.message_content = True  # AJOUT IMPORTANT - Corrige l'erreur "Privileged message content intent is missing"
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 WHITE = discord.Color.from_rgb(255, 255, 255)
@@ -76,7 +78,7 @@ class TribunalView(discord.ui.View):
         self.no = set()
 
     def build_embed(self, banned_by=None):
-        desc = f"""Accusè : {self.target.mention}
+        desc = f"""Accusé : {self.target.mention}
 
 Juge : {self.juge.mention}
 
@@ -92,7 +94,7 @@ Preuves : {self.preuve}
             desc += f"\n\n🔨 Juge : {banned_by.mention}"
 
         return discord.Embed(
-            title=f"Jugement de {self.target}",
+            title=f"Jugement de {self.target.display_name}",
             description=desc,
             color=WHITE
         )
@@ -102,48 +104,64 @@ Preuves : {self.preuve}
             item.disabled = True
 
     @discord.ui.button(label="Oui", style=discord.ButtonStyle.success)
-    async def yes_btn(self, interaction: discord.Interaction, button):
+    async def yes_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id in self.yes or interaction.user.id in self.no:
-            return await interaction.response.send_message("Tu as deja voté !", ephemeral=True)
+            return await interaction.response.send_message("Tu as déjà voté !", ephemeral=True)
 
         if not any(r.id in get_roles(interaction.guild.id, "vote") for r in interaction.user.roles):
-            return await interaction.response.send_message("Tu na pas les permissions requises !", ephemeral=True)
+            return await interaction.response.send_message("Tu n'as pas les permissions requises !", ephemeral=True)
 
         self.yes.add(interaction.user.id)
-        await interaction.response.send_message("Votre vote a bien etait enregistré !", ephemeral=True)
+        await interaction.response.send_message("Votre vote a bien été enregistré !", ephemeral=True)
 
         if len(self.yes) >= 3:
-            await self.target.ban(reason="Vote 3/3")
+            try:
+                await self.target.ban(reason="Vote 3/3")
+            except discord.Forbidden:
+                await interaction.followup.send("Je n'ai pas la permission de bannir cet utilisateur.", ephemeral=True)
+                return
+            
             await self.disable_all()
             await interaction.message.edit(embed=self.build_embed(banned_by=interaction.user), view=self)
         else:
             await interaction.message.edit(embed=self.build_embed(), view=self)
 
     @discord.ui.button(label="Non", style=discord.ButtonStyle.danger)
-    async def no_btn(self, interaction: discord.Interaction, button):
+    async def no_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id in self.yes or interaction.user.id in self.no:
-            return await interaction.response.send_message("Tu as deja voté !", ephemeral=True)
+            return await interaction.response.send_message("Tu as déjà voté !", ephemeral=True)
 
         if not any(r.id in get_roles(interaction.guild.id, "vote") for r in interaction.user.roles):
-            return await interaction.response.send_message("Tu na pas les permissions requises !", ephemeral=True)
+            return await interaction.response.send_message("Tu n'as pas les permissions requises !", ephemeral=True)
 
         self.no.add(interaction.user.id)
-        await interaction.response.send_message("Votre vote a bien etait enregistré !", ephemeral=True)
+        await interaction.response.send_message("Votre vote a bien été enregistré !", ephemeral=True)
         await interaction.message.edit(embed=self.build_embed(), view=self)
 
     @discord.ui.button(label="Bannir", style=discord.ButtonStyle.secondary)
-    async def direct_ban(self, interaction: discord.Interaction, button):
+    async def direct_ban(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not any(r.id in get_roles(interaction.guild.id, "ban") for r in interaction.user.roles):
-            return await interaction.response.send_message("Tu na pas les permissions requises !", ephemeral=True)
+            return await interaction.response.send_message("Tu n'as pas les permissions requises !", ephemeral=True)
 
-        await self.target.ban(reason="Bannissement direct")
+        try:
+            await self.target.ban(reason="Bannissement direct")
+        except discord.Forbidden:
+            await interaction.response.send_message("Je n'ai pas la permission de bannir cet utilisateur.", ephemeral=True)
+            return
+        
         await self.disable_all()
-        await interaction.response.defer()
-        await interaction.message.edit(embed=self.build_embed(banned_by=interaction.user), view=self)
+        await interaction.response.edit_message(embed=self.build_embed(banned_by=interaction.user), view=self)
 
 # ================= COMMANDE /JUGER =================
-@bot.tree.command(name="juger")
+@bot.tree.command(name="juger", description="Juger un utilisateur")
 async def juger(interaction: discord.Interaction, user: discord.Member, raison: str, preuve: str):
+    
+    # Vérification des permissions
+    if not interaction.user.guild_permissions.ban_members:
+        return await interaction.response.send_message(
+            "Tu n'as pas la permission de bannir des membres !",
+            ephemeral=True
+        )
 
     if is_protected(interaction.guild.id, user.id):
         return await interaction.response.send_message(
@@ -173,11 +191,35 @@ async def juger(interaction: discord.Interaction, user: discord.Member, raison: 
     embed = view.build_embed()
     await interaction.response.send_message(embed=embed, view=view)
 
+# ================= COMMANDES ADMIN =================
+@bot.tree.command(name="add_vote_role", description="Ajouter un rôle de vote")
+async def add_vote_role(interaction: discord.Interaction, role: discord.Role):
+    if interaction.user.id != ADMIN_USER_ID:
+        return await interaction.response.send_message("Tu n'es pas autorisé à utiliser cette commande.", ephemeral=True)
+    
+    cursor.execute("INSERT OR REPLACE INTO guild_roles VALUES(?,?,?)", 
+                  (interaction.guild.id, role.id, "vote"))
+    db.commit()
+    await interaction.response.send_message(f"Rôle {role.mention} ajouté aux rôles de vote.", ephemeral=True)
+
+@bot.tree.command(name="add_ban_role", description="Ajouter un rôle de ban")
+async def add_ban_role(interaction: discord.Interaction, role: discord.Role):
+    if interaction.user.id != ADMIN_USER_ID:
+        return await interaction.response.send_message("Tu n'es pas autorisé à utiliser cette commande.", ephemeral=True)
+    
+    cursor.execute("INSERT OR REPLACE INTO guild_roles VALUES(?,?,?)", 
+                  (interaction.guild.id, role.id, "ban"))
+    db.commit()
+    await interaction.response.send_message(f"Rôle {role.mention} ajouté aux rôles de ban direct.", ephemeral=True)
+
 # ================= START =================
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print("Bot prêt")
+    print(f"Bot prêt - Connecté en tant que {bot.user}")
 
-if TOKEN:
-    bot.run(TOKEN)
+if __name__ == "__main__":
+    if TOKEN:
+        bot.run(TOKEN)
+    else:
+        print("Erreur: DISCORD_TOKEN non défini dans les variables d'environnement")
