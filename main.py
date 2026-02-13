@@ -1,3 +1,31 @@
+# ================= SERVEUR WEB POUR HEALTH CHECK RENDER =================
+import threading
+from flask import Flask, jsonify
+import os
+from datetime import datetime
+
+app = Flask(__name__)
+
+@app.route('/')
+@app.route('/health')
+def health():
+    return jsonify({
+        "status": "healthy",
+        "bot": "online",
+        "timestamp": datetime.now().isoformat()
+    }), 200
+
+def run_webserver():
+    """Démarre un serveur web minimal pour les health checks de Render"""
+    port = int(os.getenv('PORT', 10000))  # Render définit automatiquement PORT
+    print(f"Démarrage du serveur health check sur le port {port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
+
+# Démarrer le serveur web dans un thread séparé
+threading.Thread(target=run_webserver, daemon=True).start()
+print("✅ Serveur health check démarré")
+# =========================================================================
+
 # ================= PYTHON 3.13 AUDIO PATCH =================
 import sys, types
 if sys.version_info >= (3, 13):
@@ -61,7 +89,7 @@ def get_protected(gid):
 # ================= BOT =================
 intents = discord.Intents.default()
 intents.members = True
-intents.message_content = True  # AJOUT IMPORTANT - Corrige l'erreur "Privileged message content intent is missing"
+intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 WHITE = discord.Color.from_rgb(255, 255, 255)
@@ -216,10 +244,13 @@ async def add_ban_role(interaction: discord.Interaction, role: discord.Role):
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"Bot prêt - Connecté en tant que {bot.user}")
+    print(f"✅ Bot prêt - Connecté en tant que {bot.user}")
+    print(f"✅ Serviteurs connectés : {len(bot.guilds)}")
+    print(f"✅ Health check disponible sur le port {os.getenv('PORT', 10000)}")
 
 if __name__ == "__main__":
     if TOKEN:
+        print("🚀 Démarrage du bot Discord...")
         bot.run(TOKEN)
     else:
-        print("Erreur: DISCORD_TOKEN non défini dans les variables d'environnement")
+        print("❌ Erreur: DISCORD_TOKEN non défini dans les variables d'environnement")
