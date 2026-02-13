@@ -17,13 +17,12 @@ def health():
 
 def run_webserver():
     """Démarre un serveur web minimal pour les health checks de Render"""
-    port = int(os.getenv('PORT', 10000))  # Render définit automatiquement PORT
-    print(f"Démarrage du serveur health check sur le port {port}")
+    port = int(os.getenv('PORT', 10000))
+    print(f"✅ Serveur health check démarré sur le port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
 
 # Démarrer le serveur web dans un thread séparé
 threading.Thread(target=run_webserver, daemon=True).start()
-print("✅ Serveur health check démarré")
 # =========================================================================
 
 # ================= PYTHON 3.13 AUDIO PATCH =================
@@ -41,7 +40,7 @@ from discord.ext import commands
 from discord import app_commands
 
 # ================= CONFIG =================
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN = os.getenv("DISCORD_TOKEN")  # VOTRE VARIABLE RESTE ICI
 ADMIN_USER_ID = 1399234120214909010
 
 # ================= DATABASE =================
@@ -184,7 +183,6 @@ Preuves : {self.preuve}
 @bot.tree.command(name="juger", description="Juger un utilisateur")
 async def juger(interaction: discord.Interaction, user: discord.Member, raison: str, preuve: str):
     
-    # Vérification des permissions
     if not interaction.user.guild_permissions.ban_members:
         return await interaction.response.send_message(
             "Tu n'as pas la permission de bannir des membres !",
@@ -245,12 +243,11 @@ async def add_ban_role(interaction: discord.Interaction, role: discord.Role):
 async def on_ready():
     await bot.tree.sync()
     print(f"✅ Bot prêt - Connecté en tant que {bot.user}")
-    print(f"✅ Serviteurs connectés : {len(bot.guilds)}")
-    print(f"✅ Health check disponible sur le port {os.getenv('PORT', 10000)}")
+    print(f"✅ Serveurs connectés : {len(bot.guilds)}")
 
 if __name__ == "__main__":
     if TOKEN:
         print("🚀 Démarrage du bot Discord...")
         bot.run(TOKEN)
     else:
-        print("❌ Erreur: DISCORD_TOKEN non défini dans les variables d'environnement")
+        print("❌ Erreur: DISCORD_TOKEN non défini")
