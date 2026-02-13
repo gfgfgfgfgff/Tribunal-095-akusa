@@ -1,16 +1,19 @@
-import os
-import sqlite3
+import os, sys, types, sqlite3
 from datetime import datetime
 from typing import Optional
 import discord
 from discord.ext import commands
 from discord import app_commands
 
+# ================= PYTHON 3.13 AUDIO PATCH =================
+if sys.version_info >= (3, 13):
+    sys.modules['audioop'] = types.ModuleType('audioop')
+
+# ================= CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
 ADMIN_USER_ID = 1399234120214909010
 
 # ================= DATABASE =================
-
 def init_db():
     db = sqlite3.connect("data.db", check_same_thread=False)
     c = db.cursor()
@@ -31,6 +34,7 @@ def init_db():
 
 db, cursor = init_db()
 
+# ================= UTILITAIRES =================
 def get_roles(gid, t):
     cursor.execute("SELECT role_id FROM guild_roles WHERE guild_id=? AND role_type=?", (gid, t))
     return [r[0] for r in cursor.fetchall()]
@@ -52,7 +56,6 @@ def get_protected(gid):
     return cursor.fetchall()
 
 # ================= BOT =================
-
 intents = discord.Intents.default()
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -60,7 +63,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 WHITE = discord.Color.from_rgb(255, 255, 255)
 
 # ================= TRIBUNAL VIEW =================
-
 class TribunalView(discord.ui.View):
     def __init__(self, target, juge, raison, preuve):
         super().__init__(timeout=None)
@@ -84,7 +86,6 @@ Preuves : {self.preuve}
 
 ✅ oui ({len(self.yes)}/3)
 ❌ non ({len(self.no)}/3)"""
-
         if banned_by:
             desc += f"\n\n🔨 Juge : {banned_by.mention}"
 
@@ -139,7 +140,6 @@ Preuves : {self.preuve}
         await interaction.message.edit(embed=self.build_embed(banned_by=interaction.user), view=self)
 
 # ================= COMMANDE /JUGER =================
-
 @bot.tree.command(name="juger")
 async def juger(interaction: discord.Interaction, user: discord.Member, raison: str, preuve: str):
 
@@ -172,7 +172,6 @@ async def juger(interaction: discord.Interaction, user: discord.Member, raison: 
     await interaction.response.send_message(embed=embed, view=view)
 
 # ================= START =================
-
 @bot.event
 async def on_ready():
     await bot.tree.sync()
