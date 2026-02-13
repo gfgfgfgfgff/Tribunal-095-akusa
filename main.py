@@ -1,13 +1,15 @@
-import os, sys, types, sqlite3
+# ================= PYTHON 3.13 AUDIO PATCH =================
+import sys, types
+if sys.version_info >= (3, 13):
+    sys.modules['audioop'] = types.ModuleType('audioop')
+
+# ================= IMPORTS =================
+import os, sqlite3
 from datetime import datetime
 from typing import Optional
 import discord
 from discord.ext import commands
 from discord import app_commands
-
-# ================= PYTHON 3.13 AUDIO PATCH =================
-if sys.version_info >= (3, 13):
-    sys.modules['audioop'] = types.ModuleType('audioop')
 
 # ================= CONFIG =================
 TOKEN = os.getenv("DISCORD_TOKEN")
