@@ -531,9 +531,6 @@ async def juger(interaction: discord.Interaction, user: discord.Member, raison: 
     view = TribunalView(user, interaction.user, raison, preuve.url)
     embed = view.build_embed()
     
-    # Ajouter la preuve en pièce jointe dans l'embed
-    embed.set_image(url=preuve.url)
-    
     config = get_guild_config(interaction.guild.id)
     mention_role = interaction.guild.get_role(config[1]) if config and config[1] else None
     
