@@ -236,6 +236,20 @@ class TribunalView(discord.ui.View):
         self.banned = False
 
     def build_embed(self, banned_by=None):
+        # Construction des listes de votants
+        yes_voters = []
+        no_voters = []
+        
+        for voter_id in self.yes:
+            voter = self.juge.guild.get_member(voter_id)
+            if voter:
+                yes_voters.append(voter.mention)
+        
+        for voter_id in self.no:
+            voter = self.juge.guild.get_member(voter_id)
+            if voter:
+                no_voters.append(voter.mention)
+        
         desc = f"""Accusé : {self.target.mention}
 
 Juge : {self.juge.mention}
@@ -247,7 +261,10 @@ Preuves : {self.preuve}
 ────────────────────────────
 
 ✅ oui ({len(self.yes)}/3)
-❌ non ({len(self.no)}/3)"""
+{chr(10).join(yes_voters) if yes_voters else ''}
+
+❌ non ({len(self.no)}/3)
+{chr(10).join(no_voters) if no_voters else ''}"""
         
         if banned_by:
             desc += f"\n\n🔨 Juge : {banned_by.mention}"
