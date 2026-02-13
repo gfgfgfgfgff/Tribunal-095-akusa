@@ -480,9 +480,16 @@ async def setdb(interaction: discord.Interaction, fichier: discord.Attachment):
 @app_commands.describe(
     user="L'utilisateur à juger",
     raison="La raison du jugement",
-    preuve="Lien vers une image ou vidéo (preuve)"
+    preuve="La preuve (image ou vidéo à uploader)"
 )
-async def juger(interaction: discord.Interaction, user: discord.Member, raison: str, preuve: str):
+async def juger(interaction: discord.Interaction, user: discord.Member, raison: str, preuve: discord.Attachment):
+    
+    # Vérifier que la preuve est une image ou une vidéo
+    if not preuve.content_type or not (preuve.content_type.startswith('image/') or preuve.content_type.startswith('video/')):
+        return await interaction.response.send_message(
+            "La preuve doit être une image ou une vidéo !",
+            ephemeral=True
+        )
     
     allowed_roles = get_allowed_roles(interaction.guild.id, "jugement")
     if allowed_roles:
@@ -521,8 +528,11 @@ async def juger(interaction: discord.Interaction, user: discord.Member, raison: 
             ephemeral=True
         )
 
-    view = TribunalView(user, interaction.user, raison, preuve)
+    view = TribunalView(user, interaction.user, raison, preuve.url)
     embed = view.build_embed()
+    
+    # Ajouter la preuve en pièce jointe dans l'embed
+    embed.set_image(url=preuve.url)
     
     config = get_guild_config(interaction.guild.id)
     mention_role = interaction.guild.get_role(config[1]) if config and config[1] else None
@@ -538,7 +548,6 @@ async def juger(interaction: discord.Interaction, user: discord.Member, raison: 
             await interaction.response.send_message(content=content, embed=embed, view=view)
     else:
         await interaction.response.send_message(content=content, embed=embed, view=view)
-
 # ================= COMMANDES DE PROTECTION =================
 @bot.tree.command(name="protect", description="Protéger un utilisateur contre les jugements")
 async def protect(interaction: discord.Interaction, user: discord.Member):
